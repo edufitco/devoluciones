@@ -1,0 +1,544 @@
+#############################################################################################
+# Nombre del script     : AMTZposRecordSettlement_devolucion.scr
+# # Historial de modificación:
+# <No. serie>   <Fecha>      <Nombre del autor>    <Descripción>
+# ------------  ----------   --------------------  -------------------------------------------
+# SCR001        28-03-2025   Alberto Martinez Cruz Inicio de flujo devoluciones         
+
+##############################################################################################
+<--start
+trace on
+#parche
+sv_r = REPEXISTS("CUST")
+IF(sv_r == 0) THEN
+#{
+        CREATEREP ("CUST")
+#}
+ENDIF     
+
+#-----------------------------------------------------------------
+# Check whether DAT Class exists else create it
+#-----------------------------------------------------------------
+sv_r = CLASSEXISTS("CUST","DATA")
+IF(sv_r == 0) THEN
+#{
+        CREATECLASS ("CUST","DATA",5)
+#}
+ENDIF
+
+sv_r = CLASSEXISTS("CUST","TRAN")
+
+IF(sv_r == 0) THEN
+#{
+		CREATECLASS ("CUST","TRAN",5)
+#}
+ENDIF
+
+###variable numREFDEV|SELECT
+CUST.DATA.numREFDEV="0"
+##variable DIFDAYS
+CUST.DATA.DIFDAYS="0"
+CUST.DATA.MAXDAYS="0"
+CUST.DATA.BDDEVAMT="0.00"
+CUST.DATA.BDCARDNUM="0"
+CUST.DATA.BDAUTHID="0"
+CUST.DATA.BDTranDEVDate=""
+CUST.DATA.freeTextDesc = ""
+CUST.DATA.posOnlineCnt="0"
+CUST.DATA.descType=""
+CUST.DATA.settleAmtDiff=""
+CUST.DATA.incAcctTrnType=""
+CUST.DATA.custAccntFlg="N"
+CUST.DATA.accntNum=""
+CUST.DATA.coverageAmt=""
+CUST.DATA.ACCTBALAMT1="0.00"
+CUST.DATA.EFFAMT="0.00"
+CUST.DATA.incTranAmt="0.00"
+CUST.DATA.errorMsg=""
+CUST.DATA.coverFlg="N"
+CUST.TRAN.TranCurr="MXP"
+CUST.DATA.AcctId=""
+CUST.TRAN.UserTrnCode = ""
+CUST.TRAN.ChannelId = ""
+CUST.TRAN.tranCategory = ""
+CUST.TRAN.freeText7 = ""
+CUST.DATA.respTranId=""
+CUST.DATA.respTranDate=""
+CUST.DATA.respCod=""
+CUST.DATA.respMsg=""
+CUST.DATA.incidentReason=""
+CUST.DATA.blockUser=""
+CUST.DATA.blockDate=""
+CUST.DATA.settleFlg=""
+CUST.DATA.LienSettleId=""
+CUST.DATA.LienSettleAmt=""
+CUST.DATA.LienExpSettle=""
+CUST.TRAN.LienExpDays = ""
+CUST.TRAN.LienExpDate=""
+CUST.TRAN.LienId=""
+CUST.DATA.OFFDEV=""
+CUST.DATA.onlineAmt=""
+CUST.DATA.freeTxt1="" 
+CUST.DATA.custTranId=""
+CUST.DATA.custTranDate=""
+CUST.DATA.appliedSettleAmt=""
+CUST.DATA.pendingSettleAmt=""
+CUST.DATA.exchangeAmtDiff=""
+CUST.DATA.userid=""
+CUST.DATA.totSourceAmt=format$(CDOUBLE(CUST.DATA.totSourceAmt),"%0.2f")
+CUST.DATA.returnFlg = "Y"
+CUST.DATA.homeCurr = "MXP"
+CUST.DATA.currSym = ""
+CUST.DATA.homeCurrSym = ""
+CUST.DATA.branchId = ""
+CUST.DATA.AnlStat = ""
+CUST.DATA.freeTxt2        = ""
+CUST.DATA.freeTxt3      = ""
+CUST.DATA.freeTxt4      = ""
+CUST.DATA.dateDiff = ""
+CUST.DATA.LimitDate = ""                             # Limite de dias
+CUST.DATA.posMatchCnt= ""
+#SCR001-I
+CUST.DATA.debAccnt= ""
+CUST.DATA.credAccnt= ""
+#SCR001-F 
+
+IF(FIELDEXISTS(CUST.DATA.FIDADQ)) THEN
+#{
+	IF(CUST.DATA.FIDADQ=="") then
+	#{
+		CUST.DATA.FIDADQ="B127"
+	#}
+	ENDIF
+#}
+ENDIF
+
+IF(FIELDEXISTS(CUST.DATA.currCode) AND FIELDEXISTS(CUST.DATA.homeCurr))THEN
+#{
+	IF(CUST.DATA.currCode!="") THEN
+	#{
+		sv_u = ""
+		sv_u = urhk_B2k_isStringNumeric(CUST.DATA.currCode)
+		if(sv_u == 0)then
+		#{
+			#Fetch Foreign Currency Symbol
+			sv_s = ""
+			sv_s = "currSym| SELECT CRNCY_SYMBOL FROM TBAADM.CNC WHERE ISO_CODE = ?SVAR AND BANK_ID = ?SVAR AND ROWNUM=1"
+			BANCS.INPARAM.BINDVARS = ""
+			BANCS.INPARAM.BINDVARS = CUST.DATA.currCode + "|" + BANCS.STDIN.contextBankId
+			PRINT(BANCS.INPARAM.BINDVARS)
+			print(sv_s)
+			sv_u = urhk_dbSelectWithBind(sv_s)
+			IF(sv_u ==0) THEN
+			#{
+				CUST.DATA.currSym  = BANCS.OUTPARAM.currSym
+				print(CUST.DATA.currSym)
+			#}
+			ENDIF
+		#}
+		endif
+					
+		#Fetch home Currency Symbol
+		sv_s = ""
+		sv_s = "homeCurrSym| SELECT CRNCY_SYMBOL FROM TBAADM.CNC WHERE CRNCY_CODE = ?SVAR AND BANK_ID = ?SVAR AND ROWNUM=1"
+		BANCS.INPARAM.BINDVARS = ""
+		BANCS.INPARAM.BINDVARS = CUST.DATA.homeCurr + "|" + BANCS.STDIN.contextBankId
+		PRINT(BANCS.INPARAM.BINDVARS)
+		print(sv_s)
+		sv_u = urhk_dbSelectWithBind(sv_s)
+		IF(sv_u ==0) THEN
+		#{
+			CUST.DATA.homeCurrSym  = BANCS.OUTPARAM.homeCurrSym
+			print(CUST.DATA.homeCurrSym)
+		#}
+		ENDIF
+	#}
+	ELSE
+	#{
+		#Fetch home Currency Symbol
+		sv_s = ""
+		sv_s = "homeCurrSym| SELECT CRNCY_SYMBOL FROM TBAADM.CNC WHERE CRNCY_CODE = ?SVAR AND BANK_ID = ?SVAR AND ROWNUM=1"
+		BANCS.INPARAM.BINDVARS = ""
+		BANCS.INPARAM.BINDVARS = CUST.DATA.homeCurr + "|" + BANCS.STDIN.contextBankId
+		PRINT(BANCS.INPARAM.BINDVARS)
+		print(sv_s)
+		sv_u = urhk_dbSelectWithBind(sv_s)
+		IF(sv_u ==0) THEN
+		#{
+			CUST.DATA.homeCurrSym  = BANCS.OUTPARAM.homeCurrSym
+			print(CUST.DATA.homeCurrSym)
+		#}
+		ENDIF
+	#}
+	ENDIF
+#}
+ENDIF
+
+######################################################################################################
+##### Getting the CPARAMA for the limit Days 
+##### DEV_PUR_DAYS Stands for Devolution of purchase limit days 
+
+BANCS.INPARAM.BINDVARS = "LIABILITIES|BNKL|DEV_PUR_DAYS|" + BANCS.STDIN.contextBankId + "|Y|N"
+
+sv_s = ""
+sv_s = sv_s + "limitDays|SELECT V.PARAMETER_VALUE FROM CUSTOM.C_CPARAM_MASTER_TABLE M INNER JOIN CUSTOM.C_CPVALUE V ON M.BANK_ID = V.BANK_ID AND M.PARAMETER_ID = V.PARAMETER_ID AND NVL(M.ENTITY_CRE_FLG,'N') = NVL(V.ENTITY_CRE_FLG,'N') AND NVL(M.DEL_FLG,'N') = NVL(V.DEL_FLG,'N')"
+sv_s = sv_s + " WHERE M.MODULE_NAME = ?SVAR"
+sv_s = sv_s + " AND M.PARAMETER_LEVEL = ?SVAR"
+sv_s = sv_s + " AND M.PARAMETER_ID = ?SVAR"
+sv_s = sv_s + " AND M.BANK_ID = ?SVAR"
+sv_s = sv_s + " AND NVL(M.ENTITY_CRE_FLG,'N') = ?SVAR"
+sv_s = sv_s + " AND NVL(M.DEL_FLG,'N') = ?SVAR"
+print(sv_s)
+sv_d = urhk_dbSelectWithBind(sv_s)
+print(sv_d)
+IF(sv_d == 0) THEN
+#{
+        CUST.DATA.LimitDate = BANCS.OUTPARAM.limitDays
+        PRINT(CUST.DATA.LimitDate)
+#}
+ELSE
+#{
+        CUST.DATA.LimitDate = "180"
+#}
+ENDIF
+##SET MAX DAYS RULE
+CUST.DATA.MAXDAYS="180"
+
+
+######################################################################################################
+IF((CUST.DATA.currCode != "484") AND (TRIM(CUST.DATA.TXSourceCountry) != "MX"))THEN
+#{	
+	CUST.DATA.EXTRANJERO = "Y"
+	CUST.DATA.MONTO = CUST.DATA.totSourceAmt
+#}
+ELSE 
+#{
+	CUST.DATA.EXTRANJERO = "N"
+	CUST.DATA.MONTO = CUST.DATA.PurAmt
+#}
+ENDIF
+
+
+
+IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELDEXISTS(CUST.DATA.PurAmt) AND FIELDEXISTS(CUST.DATA.purDateTemp) AND FIELDEXISTS(CUST.DATA.tranType))THEN	
+#{
+		
+	#####################################################################################
+	################Calculo de numero de dias pasados de la compra a la devolucion
+	###############paso 1 obtiene el numeric reference number 
+	#Consulta a la base de datos CUTS_MCP_TBL devuelve cuantas DEVOLUCIONES EXISTEN PARA LA CUENTA,FECHA,CANAL,BANCO Y DONDE EL VALOR DE NUMERICREFVALUE ES 1)SI EXISTENUMREFVALUE CON ESE VALOR DEVUELVE EL VALOR SINO BUSCA EL NUMREFVALUE CON EL AUTHID
+	sv_s = ""
+	sv_s = "numREFDEV|SELECT T1.NUMERICREFNUM FROM CUSTOM.CUST_MCP_TBL T1 WHERE 1=1 AND T1.ACCTID = ?SVAR AND T1.MODEOFOPN = ?SVAR"
+	sv_s = sv_s + " AND T1.NUMERICREFNUM = CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_MCP_TBL T2 WHERE T2.ACCTID = ?SVAR AND T2.MODEOFOPN = ?SVAR AND T2.NUMERICREFNUM = ?SVAR AND TO_CHAR(NVL(T2.REQTRANDATE, T2.TRANDATE), 'DD-MM-YYYY') =?SVAR ) THEN ?SVAR ELSE (SELECT T2.NUMERICREFNUM FROM CUSTOM.CUST_MCP_TBL T2 WHERE T2.AUTHID = ?SVAR FETCH FIRST 1 ROW ONLY) END"
+	sv_s = sv_s + " AND TO_CHAR(NVL(T1.REQTRANDATE, T1.TRANDATE), 'DD-MM-YYYY') = ?SVAR AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR"
+	print(sv_s)
+	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber + "|D|" +CUST.DATA.accNumber + "|D|" + CUST.DATA.AuthNum +"|"+ CUST.DATA.purDateTemp +"|"+ CUST.DATA.AuthNum +"|"+ CUST.DATA.AuthNum + "|"+ CUST.DATA.purDateTemp + "|POS|" + BANCS.STDIN.contextBankId				
+	PRINT(sv_s)
+	PRINT(BANCS.INPARAM.BINDVARS)
+	sv_u = urhk_dbSelectWithBind(sv_s)
+	print(sv_u)
+	#Si no devuelve valores
+	IF(sv_u==0) THEN
+	#{
+		CUST.DATA.numREFDEV=BANCS.OUTPARAM.numREFDEV
+		print(CUST.DATA.numREFDEV)
+	#}
+	ENDIF
+	#}
+	#########Paso 2 con el numrefenumber obtener los dias transcurridos.
+	sv_s = ""
+	sv_s = "DIFDAYS|SELECT (NVL(D.REQVALUEDATE, D.TRANDATE) - NVL(C.REQVALUEDATE, C.TRANDATE)) AS DIF_DIAS FROM CUSTOM.CUST_MCP_TBL C JOIN CUSTOM.CUST_MCP_TBL D ON C.ACCTID = D.ACCTID"
+	sv_s = sv_s + " AND D.NUMERICREFNUM = C.AUTHID AND D.NUMERICREFNUM= ?SVAR AND TO_CHAR(NVL(D.REQVALUEDATE, D.TRANDATE), 'DD-MM-YYYY') = ?SVAR AND C.CHANNELID= ?SVAR"
+	sv_s = sv_s + " AND D.MODEOFOPN=?SVAR AND C.BANK_ID = ?SVAR FETCH FIRST 1 ROW ONLY"
+	print(sv_s)
+	BANCS.INPARAM.BINDVARS =CUST.DATA.numREFDEV + "|" + CUST.DATA.purDateTemp + "|POS" + "|D|"+ BANCS.STDIN.contextBankId		
+	PRINT(sv_s)
+	PRINT(BANCS.INPARAM.BINDVARS)
+	sv_u = urhk_dbSelectWithBind(sv_s)
+	print(sv_u)
+	#Si no devuelve valores
+	IF(sv_u==0) THEN
+	#{
+		CUST.DATA.DIFDAYS=BANCS.OUTPARAM.DIFDAYS
+		print(CUST.DATA.DIFDAYS)
+	#}
+	ENDIF
+	
+	
+		################################################################################
+	## Variable que verifica que no searepetida (posOnlineCnt) , cuenta la cantidad de NUMERICREFENUMBER
+	sv_s = ""
+	sv_s = "posOnlineCnt|SELECT count(NUMERICREFNUM) FROM CUSTOM.CUST_MCP_TBL WHERE 1=1"
+	sv_s = sv_s + " AND ACCTID=?SVAR AND NUMERICREFNUM = ?SVAR AND TO_CHAR(NVL(REQTRANDATE,TRANDATE),'DD-MM-YYYY')=?SVAR AND CHANNELID=?SVAR AND MODEOFOPN=?SVAR AND BANK_ID = ?SVAR "
+	print(sv_s)
+	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber + "|" +CUST.DATA.numREFDEV + "|" +CUST.DATA.purDateTemp+"|POS|D|"+ BANCS.STDIN.contextBankId			
+	PRINT(sv_s)
+	PRINT(BANCS.INPARAM.BINDVARS)
+	sv_u = urhk_dbSelectWithBind(sv_s)
+	print(sv_u)
+	IF(sv_u==0) THEN
+	#{
+		CUST.DATA.posOnlineCnt=BANCS.OUTPARAM.posOnlineCnt
+		print(CUST.DATA.posOnlineCnt)
+	#}
+	ENDIF
+	
+	
+	#####Variable que trae el monto de la devolucion
+	sv_s = ""
+	sv_s = "BDDEVAMT,BDAUTHID,BDTranDEVDate|SELECT tranamt,authid,NVL(REQVALUEDATE, TRANDATE) FROM CUSTOM.CUST_MCP_TBL WHERE 1=1 AND ACCTID= ?SVAR AND NUMERICREFNUM = ?SVAR"
+	sv_s = sv_s + " AND TO_CHAR(NVL(REQTRANDATE,TRANDATE), 'DD-MM-YYYY') = ?SVAR AND CHANNELID = ?SVAR AND MODEOFOPN = ?SVAR AND BANK_ID = ?SVAR"
+	print(sv_s)
+	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber + "|" +CUST.DATA.numREFDEV + "|" +CUST.DATA.purDateTemp+"|POS|D|"+ BANCS.STDIN.contextBankId			
+	PRINT(sv_s)
+	PRINT(BANCS.INPARAM.BINDVARS)
+	sv_u = urhk_dbSelectWithBind(sv_s)
+	print(sv_u)
+	IF(sv_u==0) THEN
+	#{
+		CUST.DATA.BDDEVAMT=BANCS.OUTPARAM.BDDEVAMT
+		print(CUST.DATA.BDDEVAMT)
+		CUST.DATA.BDAUTHID=BANCS.OUTPARAM.BDAUTHID
+		print(CUST.DATA.BDAUTHID)
+		CUST.DATA.BDTranDEVDate=BANCS.OUTPARAM.BDTranDEVDate
+		print(CUST.DATA.BDTranDEVDate)
+	#}
+	ENDIF
+	
+		#####Variable que trae numero de tarjeta
+	sv_s = ""
+	sv_s = "BDCARDNUM|SELECT TO_NUMBER(crd_mod_frmt, 'XXXXXXXXXXXXXXXXXXXX') AS decimal_value FROM CUSTOM.CUST_CARD_ACCT_TBL ccat WHERE EMP_ACCNT_NUM = ?SVAR"
+	print(sv_s)
+	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber		
+	PRINT(sv_s)
+	PRINT(BANCS.INPARAM.BINDVARS)
+	sv_u = urhk_dbSelectWithBind(sv_s)
+	print(sv_u)
+	IF(sv_u==0) THEN
+	#{
+		CUST.DATA.BDCARDNUM=BANCS.OUTPARAM.BDCARDNUM
+		print(CUST.DATA.BDCARDNUM)
+	#}
+	ENDIF
+	
+	## 1. Verificar si es Nacional o no.
+	IF(CUST.DATA.EXTRANJERO == "N") THEN
+	#{	
+		PRINT("NACIONAL")
+		## a). Verificar si es repetida o no
+		IF((CUST.DATA.posOnlineCnt>1) AND (CUST.DATA.posOnlineCnt!=0))THEN
+		#{	
+			##REPETIDA
+			##El primero aplicado, el resto a analisis-->cuenta de oficina
+			#While que aplica el primero y el resto lo manda a analisis
+			PRINT("REPETIDA")
+			PRINT(CUST.DATA.posOnlineCnt)
+			sv_n=0	
+			WHILE(sv_n < CUST.DATA.posOnlineCnt)
+			#{
+							print(sv_n)
+							if(sv_n==0) THEN
+							#{
+								##Aplicael primero
+									
+
+							#}
+							else
+							#{	##el resto a analisis
+									
+
+							#}
+							endif
+
+							
+							##aumenta la cuenta
+							sv_n =sv_n +1
+			#}
+			DO
+			
+			
+					
+			
+			
+			
+		
+		#}
+		###SI NO ES REPETIDA
+		ELSE 
+		#{
+			PRINT("NO ES REPETIDA NACIONAL")
+			##b. Verificar los 180 dias
+			IF( CINT(CUST.DATA.DIFDAYS) <= CINT(CUST.DATA.MAXDAYS) ) THEN
+			#{
+				PRINT("DENTRO DE LOS 180")
+				####################################impresion datos
+				print(CUST.DATA.cardNum)
+				print(CUST.DATA.BDCARDNUM)
+				print(CUST.DATA.PurAmt)
+				print(CUST.DATA.BDDEVAMT)
+				print(CUST.DATA.AuthNum)
+				print(CUST.DATA.BDAUTHID)
+				print(CUST.DATA.purDateTemp)
+				print(CUST.DATA.BDTranDEVDate)
+				
+				
+				##Verifica que haga match  card num                    MONTO                                numero de autorizacion                     fecha                           
+				IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDEVAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.BDAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate))THEN
+				#{
+					##Si hace match aplicado
+					PRINT("MATCH PERFECTO")
+				#}
+				ELSE 
+				#{
+					##Sino hace match verifica que sea menor a 29,999
+					PRINT("NO HIZO MATCH")
+					IF(CUST.DATA.BDDEVAMT <=29999.99 )THEN
+					#{	
+						##Aplicado a la cuenta del cliente
+						PRINT("MENOR A 29999.99")
+					
+					#}
+					ELSE 
+					#{
+						##Analisis, abonar cuenta de oficna
+						PRINT("MAYOR A 30,000")
+
+					#}
+					ENDIF
+					
+
+				#}
+				ENDIF
+				
+			
+			#}
+			ELSE 
+			#{
+				##Anlisis, abonar a la cuenta de oficina
+				PRINT ("MAS DE 180 DIAS")
+			#}
+			ENDIF
+		#}
+		ENDIF	
+	#}
+	##EXTRANJERO
+	ELSE 
+	#{
+		PRINT("EXTRANJERO")
+		## a). Verificar si es repetida o no
+		IF((CUST.DATA.posOnlineCnt>1) AND (CUST.DATA.posOnlineCnt!=0)) THEN
+		#{	
+			#El primero aplicado, el resto a analisis -->cuenta de oficina para devoluciones fuera de política
+			PRINT ("EXTRANJERO REPETIDA")
+		
+		#}
+		###SI NO ES REPETIDA
+		ELSE 
+			PRINT("EXTRANJERO NO REPETIDA")
+		#{
+			## Verificar si se identifica como FASTFOUND
+			IF(1==0)THEN
+			#{ 
+				#Si se identifica como FASTFOUND
+				PRINT("FAST FOUND")
+			
+			#}
+			ELSE 
+			#{
+				#SI NO SE IDENTIFICA COMO FASTFOUND
+				PRINT("SI NO SE IDENTIFICA COMO FASTFOUND")
+				##b. Verificar los 180 dias
+				IF( CINT(CUST.DATA.DIFDAYS) <= CINT(CUST.DATA.MAXDAYS) ) THEN
+				#{
+					PRINT("DENTRO DE LOS 180")
+					##Verifica que haga match
+					IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDEVAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.BDAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate))THEN
+					#{
+						##Si hace match aplicado
+						PRINT("HACE MATCH")
+					#}
+					ELSE 
+					#{
+						##Sino hace match verifica que sea menor a 29,999
+						PRINT("NO HIZO MATCH")
+						IF(CUST.DATA.BDDEVAMT <=29999.99 )THEN
+						#{	
+							##Aplicado a la cuenta del cliente
+							PRINT("MENOR A 29999")
+					
+						#}
+						ELSE 
+						#{
+							##Analisis, abonar cuenta de oficna
+							PRINT("MAYOR A 29999")
+
+						#}
+						ENDIF
+					
+					#}
+					ENDIF
+				#}
+				ELSE 
+				#{
+					##Anlisis, abonar a la cuenta de oficina
+					PRINT("MAYOR A 180")
+
+				#}
+				ENDIF				
+
+			#}
+			ENDIF
+		
+		
+		#}
+		ENDIF
+		
+		
+	#}
+	ENDIF
+	
+	
+	
+	
+	
+
+	
+
+#}
+ENDIF	
+	
+ENDOFSCRIPT:
+
+ELSE 
+#{
+	IF((CUST.DATA.posOnlineCnt>0) and (CUST.DATA.settleFlg!="Y")) THEN 
+	#{
+		sv_s=""
+		sv_s=sv_s+"UPDATE CUSTOM.CUST_MCP_TBL SET SETTLEMENT_FILE_FLG='Y' "
+		sv_s=sv_s+" WHERE ACCTID=?SVAR AND TO_CHAR(NVL(REQTRANDATE,TRANDATE),'DD-MM-YYYY')=?SVAR AND BANK_ID = ?SVAR "
+		sv_s=sv_s+" AND NUMERICREFNUM = ?SVAR  AND MODEOFOPN IN ('D')"
+		
+		
+		PRINT(sv_s)
+		BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber +"|"+CUST.DATA.purDateTemp+"|"+ BANCS.STDIN.contextBankId+"|"+CUST.DATA.AuthNum
+		PRINT(BANCS.INPARAM.BINDVARS)
+		sv_d = urhk_dbSQLWithBind(sv_s)
+		PRINT(sv_d)
+
+		IF(sv_d == 0)THEN
+		#{
+			PRINT("Data updated successfully")
+		#}
+		ELSE
+		#{
+			PRINT("Data update failed")
+		#}
+		ENDIF	
+	#}
+	ENDIF	
+			
+#}
+ENDIF
+EXITSCRIPT
+#trace off
+end-->
