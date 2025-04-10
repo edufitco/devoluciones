@@ -223,6 +223,23 @@ ENDIF
 IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELDEXISTS(CUST.DATA.PurAmt) AND FIELDEXISTS(CUST.DATA.purDateTemp) AND FIELDEXISTS(CUST.DATA.tranType))THEN	
 #{
 		
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	#####################################################################################
 	################Calculo de numero de dias pasados de la compra a la devolucion
 	###############paso 1 obtiene el numeric reference number 
