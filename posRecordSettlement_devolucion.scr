@@ -3,7 +3,7 @@
 # # Historial de modificación:
 # <No. serie>   <Fecha>      <Nombre del autor>    <Descripción>
 # ------------  ----------   --------------------  -------------------------------------------
-# SCR001        28-03-2025   Alberto Martinez Cruz Inicio de flujo devoluciones         
+# SCR001        28-03-2025   Alberto Martinez Cruz Flujo de devoluciones         
 
 ##############################################################################################
 <--start
@@ -229,7 +229,7 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 	#Consulta a la base de datos CUTS_MCP_TBL devuelve cuantas DEVOLUCIONES EXISTEN PARA LA CUENTA,FECHA,CANAL,BANCO Y DONDE EL VALOR DE NUMERICREFVALUE ES 1)SI EXISTENUMREFVALUE CON ESE VALOR DEVUELVE EL VALOR SINO BUSCA EL NUMREFVALUE CON EL AUTHID
 	sv_s = ""
 	sv_s = "numREFDEV|SELECT T1.NUMERICREFNUM FROM CUSTOM.CUST_MCP_TBL T1 WHERE 1=1 AND T1.ACCTID = ?SVAR AND T1.MODEOFOPN = ?SVAR"
-	sv_s = sv_s + " AND T1.NUMERICREFNUM = CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_MCP_TBL T2 WHERE T2.ACCTID = ?SVAR AND T2.MODEOFOPN = ?SVAR AND T2.NUMERICREFNUM = ?SVAR AND TO_CHAR(NVL(T2.REQTRANDATE, T2.TRANDATE), 'DD-MM-YYYY') =?SVAR ) THEN ?SVAR ELSE (SELECT T2.NUMERICREFNUM FROM CUSTOM.CUST_MCP_TBL T2 WHERE T2.AUTHID = ?SVAR FETCH FIRST 1 ROW ONLY) END"
+	sv_s = sv_s + " AND T1.NUMERICREFNUM = CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_MCP_TBL T2 WHERE T2.ACCTID = ?SVAR AND T2.MODEOFOPN = ?SVAR AND T2.NUMERICREFNUM = ?SVAR AND TO_CHAR(NVL(T2.REQTRANDATE, T2.TRANDATE), 'DD-MM-YYYY') =?SVAR FETCH FIRST 1 ROW ONLY ) THEN ?SVAR ELSE (SELECT T2.NUMERICREFNUM FROM CUSTOM.CUST_MCP_TBL T2 WHERE T2.AUTHID = ?SVAR FETCH FIRST 1 ROW ONLY) END"
 	sv_s = sv_s + " AND TO_CHAR(NVL(T1.REQTRANDATE, T1.TRANDATE), 'DD-MM-YYYY') = ?SVAR AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR"
 	print(sv_s)
 	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber + "|D|" +CUST.DATA.accNumber + "|D|" + CUST.DATA.AuthNum +"|"+ CUST.DATA.purDateTemp +"|"+ CUST.DATA.AuthNum +"|"+ CUST.DATA.AuthNum + "|"+ CUST.DATA.purDateTemp + "|POS|" + BANCS.STDIN.contextBankId				
@@ -286,7 +286,7 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 	
 	#####Variable que trae el monto de la devolucion
 	sv_s = ""
-	sv_s = "BDDEVAMT,BDAUTHID,BDTranDEVDate|SELECT tranamt,authid,NVL(REQVALUEDATE, TRANDATE) FROM CUSTOM.CUST_MCP_TBL WHERE 1=1 AND ACCTID= ?SVAR AND NUMERICREFNUM = ?SVAR"
+	sv_s = "BDDEVAMT,BDAUTHID,BDTranDEVDate|SELECT tranamt,authid,TO_CHAR(NVL(REQVALUEDATE, TRANDATE),'DD-MM-YYYY') FROM CUSTOM.CUST_MCP_TBL WHERE 1=1 AND ACCTID= ?SVAR AND NUMERICREFNUM = ?SVAR"
 	sv_s = sv_s + " AND TO_CHAR(NVL(REQTRANDATE,TRANDATE), 'DD-MM-YYYY') = ?SVAR AND CHANNELID = ?SVAR AND MODEOFOPN = ?SVAR AND BANK_ID = ?SVAR"
 	print(sv_s)
 	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber + "|" +CUST.DATA.numREFDEV + "|" +CUST.DATA.purDateTemp+"|POS|D|"+ BANCS.STDIN.contextBankId			
@@ -366,11 +366,11 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 		###SI NO ES REPETIDA
 		ELSE 
 		#{
-			PRINT("NO ES REPETIDA NACIONAL")
+			PRINT("Nacional NO ES REPETIDA")
 			##b. Verificar los 180 dias
 			IF( CINT(CUST.DATA.DIFDAYS) <= CINT(CUST.DATA.MAXDAYS) ) THEN
 			#{
-				PRINT("DENTRO DE LOS 180")
+				PRINT("nacional No es repetida DENTRO DE LOS 180 ")
 				####################################impresion datos
 				print(CUST.DATA.cardNum)
 				print(CUST.DATA.BDCARDNUM)
@@ -386,7 +386,7 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDEVAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.BDAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate))THEN
 				#{
 					##Si hace match aplicado
-					PRINT("MATCH PERFECTO")
+					PRINT("nacional No es repetida DENTRO DE LOS 180  MATCH PERFECTO APLICADO")
 				#}
 				ELSE 
 				#{
@@ -395,13 +395,13 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 					IF(CUST.DATA.BDDEVAMT <=29999.99 )THEN
 					#{	
 						##Aplicado a la cuenta del cliente
-						PRINT("MENOR A 29999.99")
+						PRINT("Aplicado MENOR A 29999.99")
 					
 					#}
 					ELSE 
 					#{
 						##Analisis, abonar cuenta de oficna
-						PRINT("MAYOR A 30,000")
+						PRINT("MAYOR A 30,000 a analisis")
 
 					#}
 					ENDIF
@@ -415,7 +415,7 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 			ELSE 
 			#{
 				##Anlisis, abonar a la cuenta de oficina
-				PRINT ("MAS DE 180 DIAS")
+				PRINT ("MAS DE 180 DIAS, analisis")
 			#}
 			ENDIF
 		#}
