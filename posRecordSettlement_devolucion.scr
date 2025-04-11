@@ -35,6 +35,8 @@ IF(sv_r == 0) THEN
 ENDIF
 
 ###variable numREFDEV|SELECT
+CUST.DATA.devAUTHID="0"
+CUST.DATA.devNRN="0"
 CUST.DATA.numREFDEV="0"
 ##variable DIFDAYS
 CUST.DATA.DIFDAYS="0"
@@ -42,7 +44,9 @@ CUST.DATA.MAXDAYS="0"
 CUST.DATA.BDDEVAMT="0.00"
 CUST.DATA.BDCARDNUM="0"
 CUST.DATA.BDAUTHID="0"
+CUST.DATA.DEV_REF_TYPE=""
 CUST.DATA.BDTranDEVDate=""
+CUST.DATA.BDUTranDEVDate=""
 CUST.DATA.freeTextDesc = ""
 CUST.DATA.posOnlineCnt="0"
 CUST.DATA.descType=""
@@ -222,24 +226,156 @@ ENDIF
 
 IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELDEXISTS(CUST.DATA.PurAmt) AND FIELDEXISTS(CUST.DATA.purDateTemp) AND FIELDEXISTS(CUST.DATA.tranType))THEN	
 #{
+	
+	##Verificar si el numero recibido es AUTHID, NUMERICREFERENCENUMBER o error
+	sv_s = ""
+	sv_s = "DEV_REF_TYPE|SELECT CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_MCP_TBL WHERE AUTHID = ?SVAR AND ACCTID = ?SVAR AND MODEOFOPN = ?SVAR AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR) THEN 'AUTHID' WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_MCP_TBL WHERE NUMERICREFNUM = ?SVAR AND ACCTID = ?SVAR AND MODEOFOPN = ?SVAR AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR) THEN 'NUMERICREFNUM' ELSE 'NOT_FOUND' END AS REF_TYPE FROM DUAL"
+	print(sv_s)
+	BANCS.INPARAM.BINDVARS =CUST.DATA.AuthNum +"|"+CUST.DATA.accNumber +"|D|"+ "POS|" + BANCS.STDIN.contextBankId +"|"+CUST.DATA.AuthNum +"|"+CUST.DATA.accNumber +"|D|"+ "POS|" + BANCS.STDIN.contextBankId
+	PRINT(sv_s)
+	PRINT(BANCS.INPARAM.BINDVARS)
+	sv_u = urhk_dbSelectWithBind(sv_s)
+	print(sv_u)
+	#Si no devuelve valores
+	IF(sv_u==0) THEN
+	#{
+		CUST.DATA.DEV_REF_TYPE=BANCS.OUTPARAM.DEV_REF_TYPE
+		print(CUST.DATA.DEV_REF_TYPE)
+	#}
+	ENDIF
+	
+	
+	
+	#SI ES AUTH ID OBTENEMOS NUMERICREFERENCE NUMBER.
+	#SI ES NUMERICREFERENCE NUMBER OBTENEMOS
+	IF(CUST.DATA.DEV_REF_TYPE == "AUTHID")THEN
+	#{
+		##pedimos numeric reference numb con fecha 
+		sv_s = ""
+		sv_s = "devNRN|SELECT NUMERICREFNUM FROM CUSTOM.CUST_MCP_TBL WHERE AUTHID = ?SVAR AND ACCTID = ?SVAR AND TO_CHAR(NVL(REQTRANDATE, TRANDATE), 'DD-MM-YYYY') = ?SVAR AND MODEOFOPN = ?SVAR AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR ORDER BY NVL(REQTRANDATE, TRANDATE) DESC FETCH FIRST 1 ROW ONLY"
+		print(sv_s)
+		BANCS.INPARAM.BINDVARS =  CUST.DATA.AuthNum + "|" + CUST.DATA.accNumber + "|" + CUST.DATA.purDateTemp + "|D|" + "POS|" + BANCS.STDIN.contextBankId				
+		PRINT(sv_s)
+		PRINT(BANCS.INPARAM.BINDVARS)
+		sv_u = urhk_dbSelectWithBind(sv_s)
+		print(sv_u)
+		#Si no devuelve valores
+		IF(sv_u==0) THEN
+		#{
+			CUST.DATA.devNRN=BANCS.OUTPARAM.devNRN
+			print(CUST.DATA.devNRN)
+		#}
+		ELSE
+		#{
+			#SINO con el monto 
+			sv_s = ""
+			sv_s = "devNRN|SELECT NUMERICREFNUM FROM CUSTOM.CUST_MCP_TBL WHERE AUTHID = ?SVAR  AND ACCTID = ?SVAR  AND TRANAMT = ?SVAR  AND MODEOFOPN = ?SVAR  AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR  ORDER BY NVL(REQTRANDATE, TRANDATE) DESC FETCH FIRST 1 ROW ONLY"
+			print(sv_s)
+			BANCS.INPARAM.BINDVARS =  CUST.DATA.AuthNum + "|" + CUST.DATA.accNumber + "|" + CUST.DATA.PurAmt + "|D|" + "POS|" + BANCS.STDIN.contextBankId				
+			PRINT(sv_s)
+			PRINT(BANCS.INPARAM.BINDVARS)
+			sv_u = urhk_dbSelectWithBind(sv_s)
+			print(sv_u)
+			#Si no devuelve valores
+			IF(sv_u==0) THEN
+			#{
+				CUST.DATA.devNRN=BANCS.OUTPARAM.devNRN
+				print(CUST.DATA.devNRN)
+			#}
+			#sino desnudo
+			ELSE
+			#{
+				#SINO con el monto sino desnudo
+				sv_s = ""
+				sv_s = "devNRN|SELECT NUMERICREFNUM FROM CUSTOM.CUST_MCP_TBL WHERE AUTHID = ?SVAR  AND ACCTID = ?SVAR  AND MODEOFOPN = ?SVAR  AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR  ORDER BY NVL(REQTRANDATE, TRANDATE) DESC FETCH FIRST 1 ROW ONLY"
+				print(sv_s)
+				BANCS.INPARAM.BINDVARS =  CUST.DATA.AuthNum + "|" + CUST.DATA.accNumber + "|D|" + "POS|" + BANCS.STDIN.contextBankId				
+				PRINT(sv_s)
+				PRINT(BANCS.INPARAM.BINDVARS)
+				sv_u = urhk_dbSelectWithBind(sv_s)
+				print(sv_u)
+				#Si no devuelve valores
+				IF(sv_u==0) THEN
+				#{
+					CUST.DATA.devNRN=BANCS.OUTPARAM.devNRN
+					print(CUST.DATA.devNRN)
+				#}
+				ENDIF
+			#}
+			ENDIF
+		#}
+		ENDIF
 		
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+		
+	#}
+	ELSE 
+	#{
+		IF(CUST.DATA.DEV_REF_TYPE == "NUMERICREFNUM")THEN
+		#{	
+			#SI ES NUMERICREFERENCE NUMBER OBTENEMOS
+			##pedimos authid con fecha 
+			sv_s = ""
+			sv_s = "devAUTHID|SELECT AUTHID FROM CUSTOM.CUST_MCP_TBL WHERE NUMERICREFNUM = ?SVAR AND ACCTID = ?SVAR AND TO_CHAR(NVL(REQTRANDATE, TRANDATE), 'DD-MM-YYYY') = ?SVAR AND MODEOFOPN = ?SVAR AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR ORDER BY NVL(REQTRANDATE, TRANDATE) DESC FETCH FIRST 1 ROW ONLY"
+			print(sv_s)
+			BANCS.INPARAM.BINDVARS =  CUST.DATA.AuthNum + "|" + CUST.DATA.accNumber + "|" + CUST.DATA.purDateTemp + "|D|" + "POS|" + BANCS.STDIN.contextBankId				
+			PRINT(sv_s)
+			PRINT(BANCS.INPARAM.BINDVARS)
+			sv_u = urhk_dbSelectWithBind(sv_s)
+			print(sv_u)
+			#Si no devuelve valores
+			IF(sv_u==0) THEN
+			#{
+				CUST.DATA.devAUTHID=BANCS.OUTPARAM.devAUTHID
+				print(CUST.DATA.devAUTHID)
+			#}
+			ELSE
+			#{
+				#SINO con el monto 
+				sv_s = ""
+				sv_s = "devAUTHID|SELECT AUTHID FROM CUSTOM.CUST_MCP_TBL WHERE NUMERICREFNUM = ?SVAR  AND ACCTID = ?SVAR  AND TRANAMT = ?SVAR  AND MODEOFOPN = ?SVAR  AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR  ORDER BY NVL(REQTRANDATE, TRANDATE) DESC FETCH FIRST 1 ROW ONLY"
+				print(sv_s)
+				BANCS.INPARAM.BINDVARS =  CUST.DATA.AuthNum + "|" + CUST.DATA.accNumber + "|" + CUST.DATA.PurAmt + "|D|" + "POS|" + BANCS.STDIN.contextBankId				
+				PRINT(sv_s)
+				PRINT(BANCS.INPARAM.BINDVARS)
+				sv_u = urhk_dbSelectWithBind(sv_s)
+				print(sv_u)
+				#Si no devuelve valores
+				IF(sv_u==0) THEN
+				#{
+					CUST.DATA.devAUTHID=BANCS.OUTPARAM.devAUTHID
+					print(CUST.DATA.devNRN)
+				#}
+				#sino desnudo
+				ELSE
+				#{
+					sv_s = ""
+					sv_s = "devAUTHID|SELECT AUTHID FROM CUSTOM.CUST_MCP_TBL WHERENUMERICREFNUM = ?SVAR  AND ACCTID = ?SVAR  AND MODEOFOPN = ?SVAR  AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR  ORDER BY NVL(REQTRANDATE, TRANDATE) DESC FETCH FIRST 1 ROW ONLY"
+					print(sv_s)
+					BANCS.INPARAM.BINDVARS =  CUST.DATA.AuthNum + "|" + CUST.DATA.accNumber + "|D|" + "POS|" + BANCS.STDIN.contextBankId				
+					PRINT(sv_s)
+					PRINT(BANCS.INPARAM.BINDVARS)
+					sv_u = urhk_dbSelectWithBind(sv_s)
+					print(sv_u)
+					#Si no devuelve valores
+					IF(sv_u==0) THEN
+					#{
+						CUST.DATA.devAUTHID=BANCS.OUTPARAM.devAUTHID
+						print(CUST.DATA.devAUTHID)
+					#}
+					ENDIF
+				#}
+				ENDIF
+			#}
+			ENDIF			
+		#}
+		ELSE 
+		#{
+			##QUIERE DECIR QUE NO FUE ENCONTRADO
+			CUST.DATA.analisis = "Y"
+		#}
+		ENDIF		
+	#}
+	ENDIF	
 	#####################################################################################
 	################Calculo de numero de dias pasados de la compra a la devolucion
 	###############paso 1 obtiene el numeric reference number 
@@ -278,6 +414,23 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 			print(CUST.DATA.numREFDEV)
 		#}
 		ENDIF
+	#}
+	ENDIF
+	
+	###consulta que trae la fecha con cuenta y AUTHID, esta fecha solo será utilizada en caso de no poder usar la fecha otorgada
+	sv_s = ""
+	sv_s = "BDUTranDEVDate|SELECT TO_CHAR(NVL(REQVALUEDATE, TRANDATE),'DD-MM-YYYY') FROM CUSTOM.CUST_MCP_TBL T1 WHERE T1.AUTHID = ?SVAR AND T1.ACCTID = ?SVAR AND T1.MODEOFOPN = ?SVAR AND T1.CHANNELID = ?SVAR AND T1.BANK_ID = ?SVAR ORDER BY NVL(T1.REQTRANDATE, T1.TRANDATE) DESC FETCH FIRST 1 ROW ONLY"
+	print(sv_s)
+	BANCS.INPARAM.BINDVARS =CUST.DATA.AuthNum +"|"+CUST.DATA.accNumber +"|D|"+ "POS|" + BANCS.STDIN.contextBankId	
+	PRINT(sv_s)
+	PRINT(BANCS.INPARAM.BINDVARS)
+	sv_u = urhk_dbSelectWithBind(sv_s)
+	print(sv_u)
+	#Si no devuelve valores
+	IF(sv_u==0) THEN
+	#{
+		CUST.DATA.BDUTranDEVDate=BANCS.OUTPARAM.BDUTranDEVDate
+		print(CUST.DATA.BDUTranDEVDate)
 	#}
 	ENDIF
 	
