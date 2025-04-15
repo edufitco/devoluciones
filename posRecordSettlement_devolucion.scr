@@ -456,27 +456,6 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 		print(CUST.DATA.posOnlineCnt)
 	#}
 	ENDIF
-	ELSE
-	#{	
-		sv_s = ""
-		sv_s = "posOnlineCnt|SELECT count(NUMERICREFNUM) FROM CUSTOM.CUST_MCP_TBL WHERE 1=1"
-		sv_s = sv_s + " AND ACCTID=?SVAR AND NUMERICREFNUM = ?SVAR AND TO_CHAR(NVL(REQTRANDATE,TRANDATE),'DD-MM-YYYY')=?SVAR AND CHANNELID=?SVAR AND MODEOFOPN=?SVAR AND BANK_ID = ?SVAR "
-		print(sv_s)
-		BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber + "|" +CUST.DATA.devNRN + "|" +CUST.DATA.BDUTranDEVDate+"|POS|D|"+ BANCS.STDIN.contextBankId			
-		PRINT(sv_s)
-		PRINT(BANCS.INPARAM.BINDVARS)
-		sv_u = urhk_dbSelectWithBind(sv_s)
-		print(sv_u)
-		IF(sv_u==0) THEN
-		#{
-			CUST.DATA.posOnlineCnt=BANCS.OUTPARAM.posOnlineCnt
-			print(CUST.DATA.posOnlineCnt)
-		#}
-		ENDIF
-	
-	#}
-	ENDIF
-	
 	
 	#####Variable que trae el monto de la devolucion
 	sv_s = ""
@@ -668,6 +647,14 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				#{
 					PRINT("DENTRO DE LOS 180")
 					##Verifica que haga match
+					print(CUST.DATA.cardNum)
+					print(CUST.DATA.BDCARDNUM)
+					print(CUST.DATA.PurAmt)
+					print(CUST.DATA.BDDEVAMT)
+					print(CUST.DATA.AuthNum)
+					print(CUST.DATA.devAUTHID)
+					print(CUST.DATA.purDateTemp)
+					print(CUST.DATA.BDTranDEVDate)
 					IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDEVAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate))THEN
 					#{
 						##Si hace match aplicado
