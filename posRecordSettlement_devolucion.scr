@@ -516,6 +516,139 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 	#}
 	ENDIF
 	
+	sv_s = ""
+	sv_s = "onlineAmt, onlineAmtMXN,freeTxt1,TRANDATE,LIENID,settleFlg,userid,freeTxt2,freeTxt3|SELECT TRUNC(HOMETRANAMT,2), TRUNC(TRANAMT,2),FREETEXT1,TO_CHAR(TRANDATE,'DD-MM-YYYY'),LIENID,SETTLEMENT_FILE_FLG,userid,FREETEXT2,FREETEXT3 "
+	sv_s = sv_s + " FROM CUSTOM.CUST_MCP_TBL "  
+	sv_s = sv_s + " WHERE ACCTID=?SVAR AND NUMERICREFNUM = ?SVAR AND TO_CHAR(NVL(REQTRANDATE,TRANDATE),'DD-MM-YYYY')=?SVAR AND CHANNELID=?SVAR AND MODEOFOPN=?SVAR AND BANK_ID = ?SVAR AND ROWNUM=1"
+				
+	print(sv_s)
+	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber +"|"+ CUST.DATA.AuthNum +"|"+ CUST.DATA.purDateTemp +"|POS|D|"+ BANCS.STDIN.contextBankId
+	PRINT(sv_s)
+	PRINT(BANCS.INPARAM.BINDVARS)
+	sv_u = urhk_dbSelectWithBind(sv_s)
+	print(sv_u)
+	IF(sv_u==0) THEN
+	#{
+		CUST.DATA.onlineAmt=BANCS.OUTPARAM.onlineAmt
+		print(CUST.DATA.onlineAmt)
+		CUST.DATA.onlineAmtMXN=BANCS.OUTPARAM.onlineAmtMXN
+		print(CUST.DATA.onlineAmtMXN)
+		CUST.DATA.freeTxt1=BANCS.OUTPARAM.freeTxt1
+		print(CUST.DATA.freeTxt1)
+		CUST.DATA.TRANDATE=BANCS.OUTPARAM.TRANDATE
+		print(CUST.DATA.TRANDATE)
+		CUST.DATA.LIENID=BANCS.OUTPARAM.LIENID
+		print(CUST.DATA.LIENID)
+		CUST.DATA.settleFlg=BANCS.OUTPARAM.settleFlg
+		print(CUST.DATA.settleFlg)
+		CUST.DATA.userid=BANCS.OUTPARAM.userid
+		print(CUST.DATA.userid)
+		CUST.DATA.onlineLienId = BANCS.OUTPARAM.LIENID
+		print(CUST.DATA.onlineLienId)
+		CUST.DATA.freeText2 = BANCS.OUTPARAM.freeTxt2
+		PRINT(CUST.DATA.freeText2)
+		CUST.DATA.freeText3 = BANCS.OUTPARAM.freeTxt3
+		PRINT(CUST.DATA.freeText3)
+		CUST.DATA.freeTxt2 = CUST.DATA.freeText2
+		PRINT(CUST.DATA.freeTxt2)
+		CUST.DATA.freeTxt3 = CUST.DATA.freeText3
+		PRINT(CUST.DATA.freeTxt3)
+	#}
+	ENDIF
+	
+	IF(CUST.DATA.userid != "")THEN
+	#{
+		#Check CUST.DATA.userid if null or not and fetch sol id from TBAADM.UPR tbl
+		sv_s = ""
+		sv_s = "BranchSolId|SELECT sol_id FROM tbaadm.upr WHERE 1=1 "
+		sv_s = sv_s + " AND USER_ID = ?SVAR AND HOME_BANK_ID = ?SVAR"
+		BANCS.INPARAM.BINDVARS = ""
+		BANCS.INPARAM.BINDVARS = CUST.DATA.userid + "|" + BANCS.STDIN.contextBankId
+		PRINT(sv_s)
+		PRINT(BANCS.INPARAM.BINDVARS)
+		sv_u = urhk_dbSelectWithBind(sv_s)
+		print(sv_u)
+		IF (sv_u == 0) THEN
+		#{
+			CUST.DATA.BranchSolId = BANCS.OUTPARAM.BranchSolId
+			PRINT(CUST.DATA.BranchSolId)
+	
+			#if Userid is not null then we have find the solid for that user->compare with CUST.DATA.branchSameBank->use first if(use seperate ifs)
+			IF(CUST.DATA.BranchSolId == CUST.DATA.branchSameBank)THEN
+			#{
+				CUST.DATA.branchId = CUST.DATA.branchSameBank
+			#}
+			ELSE
+			#{
+				IF(CUST.DATA.BranchSolId == CUST.DATA.branchDiffBank)THEN
+				#{
+					CUST.DATA.branchId = CUST.DATA.branchDiffBank
+				#}
+				ELSE
+				#{
+					IF(CUST.DATA.BranchSolId == CUST.DATA.branchIntBank)THEN
+					#{
+							CUST.DATA.branchId = CUST.DATA.branchIntBank
+					#}
+					ENDIF
+				#}
+				ENDIF
+			#}
+			ENDIF
+		#}
+		ENDIF
+	#}
+	ENDIF
+	
+	
+	#if user solid doesn't match any branch type, use freetext1 to determine the branch id->Only online tranx
+	IF(CUST.DATA.branchId == "")THEN
+	#{
+		IF(CUST.DATA.freeTxt1=="B127")THEN
+		#(
+			CUST.DATA.branchId = CUST.DATA.branchSameBank
+		#)
+		ELSE
+		#{
+			IF( (CUST.DATA.freeTxt1=="VISA") AND (CUST.DATA.freeTxt1=="BNET") AND (TRIM(CUST.DATA.freeTxt1)=="MDS")) THEN
+			#{
+				CUST.DATA.branchId = CUST.DATA.branchIntBank
+			#}
+			ELSE
+			#{
+				CUST.DATA.branchId = CUST.DATA.branchDiffBank
+			#}
+			ENDIF
+		#}
+		ENDIF
+	#}
+	ENDIF
+	
+				
+	IF(CUST.DATA.branchId == CUST.DATA.branchSameBank)THEN
+	#{
+		CUST.DATA.incidAccnt1 = CUST.DATA.incidAccnt11
+		CUST.DATA.compProsaAcnt = CUST.DATA.compProsaAcnt1
+	#}
+	ELSE
+	#{
+		IF(CUST.DATA.branchId == CUST.DATA.branchDiffBank)THEN
+		#{
+			CUST.DATA.incidAccnt1 = CUST.DATA.incidAccnt12
+			CUST.DATA.compProsaAcnt = CUST.DATA.compProsaAcnt2
+		#}
+		ELSE
+		#{
+			CUST.DATA.incidAccnt1 = CUST.DATA.incidAccnt13
+			CUST.DATA.compProsaAcnt = CUST.DATA.compProsaAcnt3
+		#}
+		ENDIF
+	#}
+	ENDIF
+	
+	
+	
+	
 	## 1. Verificar si es Nacional o no.
 	IF(CUST.DATA.EXTRANJERO == "N") THEN
 	#{	
@@ -582,6 +715,251 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				#{
 					##Si hace match aplicado
 					PRINT("nacional No es repetida DENTRO DE LOS 180  MATCH PERFECTO APLICADO")
+					#####################################
+					##Codigo que aplica la devolucion
+					####################################
+					BANCS.OUTPUT.successOrFailure="S"
+					sv_b = ""
+					sv_b= sv_b +" count|SELECT count(*)  from  TBAADM.GAM A,TBAADM.SMT D "
+					sv_b= sv_b +" WHERE  A.FORACID=?SVAR AND A.ACID = D.ACID AND A.BANK_ID=D.BANK_ID AND A.BANK_ID=?SVAR "
+					sv_b= sv_b +" AND A.ACCT_CLS_FLG!='Y' AND A.ACTIVE_STATUS not in ('D','I') "
+					sv_b= sv_b +" and A.frez_code not in ('C','T')"
+					sv_b= sv_b +" AND D.acct_status not in ('D','I')"
+					print(sv_b)
+							
+					BANCS.INPARAM.BINDVARS = CUST.DATA.accNumber + "|" + BANCS.STDIN.contextBankId
+					PRINT(BANCS.INPARAM.BINDVARS)
+							
+					sv_u = urhk_dbSelectWithBind(sv_b)
+					print(sv_u)
+					IF(sv_u == 0)THEN
+					#{
+						IF(BANCS.OUTPARAM.count <1) THEN
+						#{
+								
+							CUST.DATA.errorCode = "ERRMGD0276"
+							sv_r = func_cmmsgerrdescWithInputs("ERRMGD0276",BANCS.STDIN.userId, "", BYREF CUST.DATA.errorMsg)
+							PRINT(sv_r)
+							PRINT(CUST.DATA.errorCode)
+							PRINT(CUST.DATA.errorMsg)
+							BANCS.OUTPUT.successOrFailure="F"
+						#}
+						ENDIF
+					#}
+					ENDIF
+					IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+					#{
+						CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+						IF((CUST.DATA.freeTxt1=="B127")OR(CUST.DATA.FIDADQ=="B127")) THEN
+							#{
+								CUST.DATA.debAccnt=CUST.DATA.devPurDebit1
+								CUST.TRAN.UserTrnCode = CUST.DATA.BAZCOMDEV_PUR
+									
+								##Devolucion Normal Devolucion
+								CUST.DATA.Nombre= "DEVOLUCION"
+								CUST.DATA.Nombre1= "CAJERO"
+								CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+								CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+								PRINT(CUST.DATA.stmtDesc)
+								CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+								CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+
+							#}
+							ELSE 
+							#{
+								IF ((CUST.DATA.freeTxt1=="VISA") OR (CUST.DATA.freeTxt1=="BNET") OR (TRIM(CUST.DATA.freeTxt1)=="MDS")OR(CUST.DATA.FIDADQ=="VISA") OR (CUST.DATA.FIDADQ=="BNET") OR (TRIM(CUST.DATA.FIDADQ)=="MDS")) THEN 
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.devIntPurDebit3
+									CUST.TRAN.UserTrnCode = CUST.DATA.DEVINT_PUR
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " " + CUST.DATA.currCode + " " + CUST.DATA.currSym + CUST.DATA.totSourceAmt + " RFC:" + CUST.DATA.RFC
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+										
+								#}
+								ELSE 
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.devPurComDebit1
+									CUST.TRAN.UserTrnCode = CUST.DATA.PUR_DEV_BAZ
+										
+									##Devolucion Normal Devolucion
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+								#}
+								ENDIF
+							#}
+							ENDIF
+							CUST.DATA.credAccnt=CUST.DATA.accNumber
+							CUST.DATA.custAccntFlg="Y"
+							CUST.TRAN.ChannelId = "POS"
+							CUST.TRAN.tranCategory = "N"
+							CUST.TRAN.freeText7 = "I"
+							CUST.DATA.accntNum=CUST.DATA.accNumber
+							CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+							IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+							#{
+								CUST.DATA.respTranId = CUST.DATA.TRANID
+								CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+								CUST.DATA.custTranId=CUST.DATA.TRANID
+								CUST.DATA.custTranDate=CUST.DATA.TRANDATE
+								print(CUST.DATA.respTranId)
+								print(CUST.DATA.respTranDate)
+								CUST.DATA.respCod = "APL00"
+								CUST.DATA.respMsg = "APLICADO"
+								CUST.DATA.incidentReason = CUST.DATA.errorMsg
+								CUST.DATA.blockUser = ""
+								CUST.DATA.blockDate = ""
+								CUST.DATA.appliedSettleAmt=CUST.DATA.PurAmt
+								CUST.DATA.pendingSettleAmt=""
+								CUST.DATA.exchangeAmtDiff=""
+								IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+								#{
+									CUST.DATA.totAppTran21Returns=CINT(CUST.DATA.totAppTran21Returns)+1
+									CUST.DATA.totAppAmtTran21Returns=CDOUBLE(CUST.DATA.totAppAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+									print(CUST.DATA.totTran21Returns)
+									CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totAmtTran21Returns)	
+								#}
+								ELSE 
+								#{
+									CUST.DATA.totAppTran21Returns=CINT(CUST.DATA.totAppTran21Returns)+1
+									CUST.DATA.totAppAmtTran21Returns=CDOUBLE(CUST.DATA.totAppAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+									print(CUST.DATA.totIntTran21Returns)
+									CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totIntAmtTran21Returns)
+								#}
+								ENDIF	
+							#}
+							ELSE
+							#{
+								CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+								CUST.DATA.incTranAmt=CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.incTranAmt)
+								print(CUST.DATA.errorMsg)
+								CUST.DATA.incAcctTrnType="C"
+								CUST.DATA.debAccnt=CUST.DATA.compProsaAcnt
+								CUST.DATA.credAccnt=CUST.DATA.incidAccnt1
+								CUST.DATA.custAccntFlg="N"
+								print(CUST.DATA.PurAmt)
+								
+								print(CUST.DATA.debAccnt)
+								print(CUST.DATA.credAccnt)
+								print(CUST.DATA.TranAmt)
+								CUST.TRAN.UserTrnCode = CUST.DATA.INCIDENCE_UTRANCODE
+								CUST.TRAN.ChannelId = "POS"
+								CUST.TRAN.tranCategory = "N"
+								CUST.TRAN.freeText7 = "I"
+								CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+								IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+								#{
+									
+									CUST.DATA.respTranId = CUST.DATA.TRANID
+									CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+									CUST.DATA.respCod = "INC00"
+									CUST.DATA.respMsg = "INCIDENCIA"
+									CUST.DATA.incidentReason = CUST.DATA.errorMsg
+									CUST.DATA.blockUser = ""
+									CUST.DATA.blockDate = ""
+									CUST.DATA.appliedSettleAmt=""
+									CUST.DATA.pendingSettleAmt=CUST.DATA.PurAmt
+									CUST.DATA.exchangeAmtDiff=""
+										
+									CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+									print(CUST.DATA.totInciTran21Returns)
+									CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totInciAmtTran21Returns)
+									IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+									#{
+										CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+										print(CUST.DATA.totTran21Returns)
+										CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totAmtTran21Returns)	
+									#}
+									ELSE
+									#{
+										CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+										print(CUST.DATA.totIntTran21Returns)
+										CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totIntAmtTran21Returns)
+									#}
+									ENDIF	
+								#}
+								ENDIF
+								
+						    #}
+							ENDIF
+														
+					#}
+					ELSE
+					#{
+						
+						CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+						CUST.DATA.incTranAmt=CDOUBLE(CUST.DATA.TranAmt)
+						print(CUST.DATA.incTranAmt)
+						print(CUST.DATA.errorMsg)
+						CUST.DATA.incAcctTrnType="C"
+						CUST.DATA.debAccnt=CUST.DATA.compProsaAcnt
+						CUST.DATA.credAccnt=CUST.DATA.incidAccnt1
+						CUST.DATA.custAccntFlg="N"
+						print(CUST.DATA.PurAmt)
+									
+						print(CUST.DATA.debAccnt)
+						print(CUST.DATA.credAccnt)
+						print(CUST.DATA.TranAmt)
+						CUST.TRAN.UserTrnCode = CUST.DATA.INCIDENCE_UTRANCODE
+						CUST.TRAN.ChannelId = "POS"
+						CUST.TRAN.tranCategory = "N"
+						CUST.TRAN.freeText7 = "I"
+						CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+						IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+						#{
+									
+							CUST.DATA.respTranId = CUST.DATA.TRANID
+							CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+							CUST.DATA.respCod = "INC00"
+							CUST.DATA.respMsg = "INCIDENCIA"
+							CUST.DATA.incidentReason = CUST.DATA.errorMsg
+							CUST.DATA.blockUser = ""
+							CUST.DATA.blockDate = ""
+							CUST.DATA.appliedSettleAmt=""
+							CUST.DATA.pendingSettleAmt=CUST.DATA.PurAmt
+							CUST.DATA.exchangeAmtDiff=""
+										
+							CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+							print(CUST.DATA.totInciTran21Returns)
+							CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+							print(CUST.DATA.totInciAmtTran21Returns)
+							IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+							#{
+								CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+								print(CUST.DATA.totTran21Returns)
+								CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.totAmtTran21Returns)	
+							#}
+							ELSE
+							#{
+								CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+								print(CUST.DATA.totIntTran21Returns)
+								CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.totIntAmtTran21Returns)
+							#}
+							ENDIF	
+						#}
+						ENDIF
+					#}
+					ENDIF
+					
+					
 				#}
 				ELSE 
 				#{
@@ -591,12 +969,353 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 					#{	
 						##Aplicado a la cuenta del cliente
 						PRINT("Aplicado MENOR A 29999.99")
-					
+						#####CODIGO aplicado
+						
+						BANCS.OUTPUT.successOrFailure="S"
+						sv_b = ""
+						sv_b= sv_b +" count|SELECT count(*)  from  TBAADM.GAM A,TBAADM.SMT D "
+						sv_b= sv_b +" WHERE  A.FORACID=?SVAR AND A.ACID = D.ACID AND A.BANK_ID=D.BANK_ID AND A.BANK_ID=?SVAR "
+						sv_b= sv_b +" AND A.ACCT_CLS_FLG!='Y' AND A.ACTIVE_STATUS not in ('D','I') "
+						sv_b= sv_b +" and A.frez_code not in ('C','T')"
+						sv_b= sv_b +" AND D.acct_status not in ('D','I')"
+						print(sv_b)
+							
+						BANCS.INPARAM.BINDVARS = CUST.DATA.accNumber + "|" + BANCS.STDIN.contextBankId
+						PRINT(BANCS.INPARAM.BINDVARS)
+							
+						sv_u = urhk_dbSelectWithBind(sv_b)
+						print(sv_u)
+						IF(sv_u == 0)THEN
+						#{
+							IF(BANCS.OUTPARAM.count <1) THEN
+							#{
+								
+								CUST.DATA.errorCode = "ERRMGD0276"
+								sv_r = func_cmmsgerrdescWithInputs("ERRMGD0276",BANCS.STDIN.userId, "", BYREF CUST.DATA.errorMsg)
+								PRINT(sv_r)
+								PRINT(CUST.DATA.errorCode)
+								PRINT(CUST.DATA.errorMsg)
+								BANCS.OUTPUT.successOrFailure="F"
+							#}
+							ENDIF
+						#}
+						ENDIF
+						IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+						#{
+							CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+							IF((CUST.DATA.freeTxt1=="B127")OR(CUST.DATA.FIDADQ=="B127")) THEN
+							#{
+								CUST.DATA.debAccnt=CUST.DATA.devPurDebit1
+								CUST.TRAN.UserTrnCode = CUST.DATA.BAZCOMDEV_PUR
+									
+								##Devolucion Normal Devolucion
+								CUST.DATA.Nombre= "DEVOLUCION"
+								CUST.DATA.Nombre1= "CAJERO"
+								CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+								CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+								PRINT(CUST.DATA.stmtDesc)
+								CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+								CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+
+							#}
+							ELSE 
+							#{
+								IF ((CUST.DATA.freeTxt1=="VISA") OR (CUST.DATA.freeTxt1=="BNET") OR (TRIM(CUST.DATA.freeTxt1)=="MDS")OR(CUST.DATA.FIDADQ=="VISA") OR (CUST.DATA.FIDADQ=="BNET") OR (TRIM(CUST.DATA.FIDADQ)=="MDS")) THEN 
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.devIntPurDebit3
+									CUST.TRAN.UserTrnCode = CUST.DATA.DEVINT_PUR
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " " + CUST.DATA.currCode + " " + CUST.DATA.currSym + CUST.DATA.totSourceAmt + " RFC:" + CUST.DATA.RFC
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+										
+								#}
+								ELSE 
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.devPurComDebit1
+									CUST.TRAN.UserTrnCode = CUST.DATA.PUR_DEV_BAZ
+										
+									##Devolucion Normal Devolucion
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+								#}
+								ENDIF
+							#}
+							ENDIF
+							CUST.DATA.credAccnt=CUST.DATA.accNumber
+							CUST.DATA.custAccntFlg="Y"
+							CUST.TRAN.ChannelId = "POS"
+							CUST.TRAN.tranCategory = "N"
+							CUST.TRAN.freeText7 = "I"
+							CUST.DATA.accntNum=CUST.DATA.accNumber
+							CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+							IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+							#{
+								CUST.DATA.respTranId = CUST.DATA.TRANID
+								CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+								CUST.DATA.custTranId=CUST.DATA.TRANID
+								CUST.DATA.custTranDate=CUST.DATA.TRANDATE
+								print(CUST.DATA.respTranId)
+								print(CUST.DATA.respTranDate)
+								CUST.DATA.respCod = "APL00"
+								CUST.DATA.respMsg = "APLICADO"
+								CUST.DATA.incidentReason = CUST.DATA.errorMsg
+								CUST.DATA.blockUser = ""
+								CUST.DATA.blockDate = ""
+								CUST.DATA.appliedSettleAmt=CUST.DATA.PurAmt
+								CUST.DATA.pendingSettleAmt=""
+								CUST.DATA.exchangeAmtDiff=""
+								IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+								#{
+									CUST.DATA.totAppTran21Returns=CINT(CUST.DATA.totAppTran21Returns)+1
+									CUST.DATA.totAppAmtTran21Returns=CDOUBLE(CUST.DATA.totAppAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+									print(CUST.DATA.totTran21Returns)
+									CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totAmtTran21Returns)	
+								#}
+								ELSE 
+								#{
+									CUST.DATA.totAppTran21Returns=CINT(CUST.DATA.totAppTran21Returns)+1
+									CUST.DATA.totAppAmtTran21Returns=CDOUBLE(CUST.DATA.totAppAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+									print(CUST.DATA.totIntTran21Returns)
+									CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totIntAmtTran21Returns)
+								#}
+								ENDIF	
+							#}
+							ELSE
+							#{
+								CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+								CUST.DATA.incTranAmt=CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.incTranAmt)
+								print(CUST.DATA.errorMsg)
+								CUST.DATA.incAcctTrnType="C"
+								CUST.DATA.debAccnt=CUST.DATA.compProsaAcnt
+								CUST.DATA.credAccnt=CUST.DATA.incidAccnt1
+								CUST.DATA.custAccntFlg="N"
+								print(CUST.DATA.PurAmt)
+								
+								print(CUST.DATA.debAccnt)
+								print(CUST.DATA.credAccnt)
+								print(CUST.DATA.TranAmt)
+								CUST.TRAN.UserTrnCode = CUST.DATA.INCIDENCE_UTRANCODE
+								CUST.TRAN.ChannelId = "POS"
+								CUST.TRAN.tranCategory = "N"
+								CUST.TRAN.freeText7 = "I"
+								CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+								IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+								#{
+									
+									CUST.DATA.respTranId = CUST.DATA.TRANID
+									CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+									CUST.DATA.respCod = "INC00"
+									CUST.DATA.respMsg = "INCIDENCIA"
+									CUST.DATA.incidentReason = CUST.DATA.errorMsg
+									CUST.DATA.blockUser = ""
+									CUST.DATA.blockDate = ""
+									CUST.DATA.appliedSettleAmt=""
+									CUST.DATA.pendingSettleAmt=CUST.DATA.PurAmt
+									CUST.DATA.exchangeAmtDiff=""
+										
+									CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+									print(CUST.DATA.totInciTran21Returns)
+									CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totInciAmtTran21Returns)
+									IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+									#{
+										CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+										print(CUST.DATA.totTran21Returns)
+										CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totAmtTran21Returns)	
+									#}
+									ELSE
+									#{
+										CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+										print(CUST.DATA.totIntTran21Returns)
+										CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totIntAmtTran21Returns)
+									#}
+									ENDIF	
+								#}
+								ENDIF
+								
+						    #}
+							ENDIF
+														
+						#}
+						ELSE
+						#{
+						
+							CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+							CUST.DATA.incTranAmt=CDOUBLE(CUST.DATA.TranAmt)
+							print(CUST.DATA.incTranAmt)
+							print(CUST.DATA.errorMsg)
+							CUST.DATA.incAcctTrnType="C"
+							CUST.DATA.debAccnt=CUST.DATA.compProsaAcnt
+							CUST.DATA.credAccnt=CUST.DATA.incidAccnt1
+							CUST.DATA.custAccntFlg="N"
+							print(CUST.DATA.PurAmt)
+									
+							print(CUST.DATA.debAccnt)
+							print(CUST.DATA.credAccnt)
+							print(CUST.DATA.TranAmt)
+							CUST.TRAN.UserTrnCode = CUST.DATA.INCIDENCE_UTRANCODE
+							CUST.TRAN.ChannelId = "POS"
+							CUST.TRAN.tranCategory = "N"
+							CUST.TRAN.freeText7 = "I"
+							CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+							IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+							#{
+									
+								CUST.DATA.respTranId = CUST.DATA.TRANID
+								CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+								CUST.DATA.respCod = "INC00"
+								CUST.DATA.respMsg = "INCIDENCIA"
+								CUST.DATA.incidentReason = CUST.DATA.errorMsg
+								CUST.DATA.blockUser = ""
+								CUST.DATA.blockDate = ""
+								CUST.DATA.appliedSettleAmt=""
+								CUST.DATA.pendingSettleAmt=CUST.DATA.PurAmt
+								CUST.DATA.exchangeAmtDiff=""
+										
+								CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+								print(CUST.DATA.totInciTran21Returns)
+								CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.totInciAmtTran21Returns)
+								IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+								#{
+									CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+									print(CUST.DATA.totTran21Returns)
+									CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totAmtTran21Returns)	
+								#}
+								ELSE
+								#{
+									CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+									print(CUST.DATA.totIntTran21Returns)
+									CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totIntAmtTran21Returns)
+								#}
+								ENDIF	
+							#}
+							ENDIF
+						#}
+						ENDIF
 					#}
 					ELSE 
 					#{
 						##Analisis, abonar cuenta de oficna
 						PRINT("MAYOR A 30,000 a analisis")
+						
+						
+						#######CODIGO Analisis
+						IF(CUST.DATA.freeTxt1=="B127") THEN
+						#{
+							CUST.DATA.debAccnt=CUST.DATA.OOFDevPurDebit1
+							CUST.DATA.credAccnt=CUST.DATA.OOFDevPurCredit1
+							CUST.TRAN.UserTrnCode = CUST.DATA.OOFCOMDEV_PUR
+							
+							##Devolucion Normal Devolucion
+							CUST.DATA.Nombre= "DEVOLUCION"
+							CUST.DATA.Nombre1= "CAJERO"
+							CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+							CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+							PRINT(CUST.DATA.stmtDesc)
+							CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+							CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)							
+						#}
+						ELSE 
+						#{
+							IF ((CUST.DATA.freeTxt1=="VISA") OR (CUST.DATA.freeTxt1=="BNET") OR (TRIM(CUST.DATA.freeTxt1)=="MDS")) THEN 
+							#{
+								CUST.DATA.debAccnt=CUST.DATA.OOFDevRedDebit2
+								CUST.DATA.credAccnt=CUST.DATA.OOFDevRedCredit2
+								CUST.TRAN.UserTrnCode = CUST.DATA.OOFINTDEV_PUR
+								CUST.DATA.Nombre= "DEVOLUCION"
+								CUST.DATA.Nombre1= "CAJERO"
+								CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " " + CUST.DATA.currCode + " " + CUST.DATA.currSym + CUST.DATA.totSourceAmt + " RFC:" + CUST.DATA.RFC
+								CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+								PRINT(CUST.DATA.stmtDesc)
+								CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+								CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+							#}
+							ELSE 
+							#{
+								CUST.DATA.debAccnt=CUST.DATA.devOOFIntPurDebit3
+								CUST.DATA.credAccnt=CUST.DATA.devOOFIntPurCredit3
+								CUST.TRAN.UserTrnCode = CUST.DATA.OOFREDDEV_PUR
+								
+								
+								##Devolucion Normal Devolucion
+								CUST.DATA.Nombre= "DEVOLUCION"
+								CUST.DATA.Nombre1= "CAJERO"
+								CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+								CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+								PRINT(CUST.DATA.stmtDesc)
+								CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+								CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+							#}
+							ENDIF
+						#}
+						ENDIF
+						
+						CUST.DATA.errorMsg="TRANSACCION EN ANALISIS"
+						print(CUST.DATA.PurAmt)
+						CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+						print(CUST.DATA.debAccnt)
+						print(CUST.DATA.credAccnt)
+						print(CUST.DATA.TranAmt)
+						CUST.TRAN.ChannelId = "POS"
+						CUST.TRAN.tranCategory = "N"
+						CUST.TRAN.freeText7 = "I"
+						CUST.DATA.AnlStat = "Y"
+						CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+						
+						IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+						#{
+							CUST.DATA.respTranId = CUST.DATA.TRANID
+							CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+							print(CUST.DATA.respTranId)
+							print(CUST.DATA.respTranDate)
+							CUST.DATA.respCod = "ANL00"
+							CUST.DATA.respMsg = "ANALISIS"
+							CUST.DATA.incidentReason = CUST.DATA.errorMsg
+							CUST.DATA.blockUser = ""
+							CUST.DATA.blockDate = ""
+							CUST.DATA.appliedSettleAmt=""
+							CUST.DATA.pendingSettleAmt=CUST.DATA.TranAmt
+							CUST.DATA.exchangeAmtDiff=""
+							CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+							print(CUST.DATA.totInciTran21Returns)
+							CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+							print(CUST.DATA.totInciAmtTran21Returns)
+							IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+							#{
+								CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+								print(CUST.DATA.totTran21Returns)
+								CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.totAmtTran21Returns)	
+							#}
+							ELSE
+							#{
+								CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+								print(CUST.DATA.totIntTran21Returns)
+								CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.totIntAmtTran21Returns)
+							#}
+							ENDIF	
+						#}
+						ENDIF
 
 					#}
 					ENDIF
@@ -611,6 +1330,106 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 			#{
 				##Anlisis, abonar a la cuenta de oficina
 				PRINT ("MAS DE 180 DIAS, analisis")
+				
+				
+				##CODIGO ANALISIS
+				IF(CUST.DATA.freeTxt1=="B127") THEN
+				#{
+					CUST.DATA.debAccnt=CUST.DATA.OOFDevPurDebit1
+					CUST.DATA.credAccnt=CUST.DATA.OOFDevPurCredit1
+					CUST.TRAN.UserTrnCode = CUST.DATA.OOFCOMDEV_PUR
+							
+					##Devolucion Normal Devolucion
+					CUST.DATA.Nombre= "DEVOLUCION"
+					CUST.DATA.Nombre1= "CAJERO"
+					CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+					CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+					PRINT(CUST.DATA.stmtDesc)
+					CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+					CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)							
+				#}
+				ELSE 
+				#{
+					IF ((CUST.DATA.freeTxt1=="VISA") OR (CUST.DATA.freeTxt1=="BNET") OR (TRIM(CUST.DATA.freeTxt1)=="MDS")) THEN 
+					#{
+						CUST.DATA.debAccnt=CUST.DATA.OOFDevRedDebit2
+						CUST.DATA.credAccnt=CUST.DATA.OOFDevRedCredit2
+						CUST.TRAN.UserTrnCode = CUST.DATA.OOFINTDEV_PUR
+						CUST.DATA.Nombre= "DEVOLUCION"
+						CUST.DATA.Nombre1= "CAJERO"
+						CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " " + CUST.DATA.currCode + " " + CUST.DATA.currSym + CUST.DATA.totSourceAmt + " RFC:" + CUST.DATA.RFC
+						CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+						PRINT(CUST.DATA.stmtDesc)
+						CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+						CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+					#}
+					ELSE 
+					#{
+						CUST.DATA.debAccnt=CUST.DATA.devOOFIntPurDebit3
+						CUST.DATA.credAccnt=CUST.DATA.devOOFIntPurCredit3
+						CUST.TRAN.UserTrnCode = CUST.DATA.OOFREDDEV_PUR
+								
+								
+						##Devolucion Normal Devolucion
+						CUST.DATA.Nombre= "DEVOLUCION"
+						CUST.DATA.Nombre1= "CAJERO"
+						CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+						CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+						PRINT(CUST.DATA.stmtDesc)
+						CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+						CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+					#}
+					ENDIF
+				#}
+				ENDIF
+						
+				CUST.DATA.errorMsg="TRANSACCION EN ANALISIS"
+				print(CUST.DATA.PurAmt)
+				CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+				print(CUST.DATA.debAccnt)
+				print(CUST.DATA.credAccnt)
+				print(CUST.DATA.TranAmt)
+				CUST.TRAN.ChannelId = "POS"
+				CUST.TRAN.tranCategory = "N"
+				CUST.TRAN.freeText7 = "I"
+				CUST.DATA.AnlStat = "Y"
+				CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+						
+				IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+				#{
+					CUST.DATA.respTranId = CUST.DATA.TRANID
+					CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+					print(CUST.DATA.respTranId)
+					print(CUST.DATA.respTranDate)
+					CUST.DATA.respCod = "ANL00"
+					CUST.DATA.respMsg = "ANALISIS"
+					CUST.DATA.incidentReason = CUST.DATA.errorMsg
+					CUST.DATA.blockUser = ""
+					CUST.DATA.blockDate = ""
+					CUST.DATA.appliedSettleAmt=""
+					CUST.DATA.pendingSettleAmt=CUST.DATA.TranAmt
+					CUST.DATA.exchangeAmtDiff=""
+					CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+					print(CUST.DATA.totInciTran21Returns)
+					CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+					print(CUST.DATA.totInciAmtTran21Returns)
+					IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+					#{
+						CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+						print(CUST.DATA.totTran21Returns)
+						CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+						print(CUST.DATA.totAmtTran21Returns)	
+					#}
+					ELSE
+					#{
+						CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+						print(CUST.DATA.totIntTran21Returns)
+						CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+						print(CUST.DATA.totIntAmtTran21Returns)
+					#}
+					ENDIF	
+				#}
+				ENDIF
 			#}
 			ENDIF
 		#}
@@ -659,6 +1478,248 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 					#{
 						##Si hace match aplicado
 						PRINT("HACE MATCH")
+						###CODIGO DE APLICADO
+						BANCS.OUTPUT.successOrFailure="S"
+						sv_b = ""
+						sv_b= sv_b +" count|SELECT count(*)  from  TBAADM.GAM A,TBAADM.SMT D "
+						sv_b= sv_b +" WHERE  A.FORACID=?SVAR AND A.ACID = D.ACID AND A.BANK_ID=D.BANK_ID AND A.BANK_ID=?SVAR "
+						sv_b= sv_b +" AND A.ACCT_CLS_FLG!='Y' AND A.ACTIVE_STATUS not in ('D','I') "
+						sv_b= sv_b +" and A.frez_code not in ('C','T')"
+						sv_b= sv_b +" AND D.acct_status not in ('D','I')"
+						print(sv_b)
+							
+						BANCS.INPARAM.BINDVARS = CUST.DATA.accNumber + "|" + BANCS.STDIN.contextBankId
+						PRINT(BANCS.INPARAM.BINDVARS)
+							
+						sv_u = urhk_dbSelectWithBind(sv_b)
+						print(sv_u)
+						IF(sv_u == 0)THEN
+						#{
+							IF(BANCS.OUTPARAM.count <1) THEN
+							#{
+								
+								CUST.DATA.errorCode = "ERRMGD0276"
+								sv_r = func_cmmsgerrdescWithInputs("ERRMGD0276",BANCS.STDIN.userId, "", BYREF CUST.DATA.errorMsg)
+								PRINT(sv_r)
+								PRINT(CUST.DATA.errorCode)
+								PRINT(CUST.DATA.errorMsg)
+								BANCS.OUTPUT.successOrFailure="F"
+							#}
+							ENDIF
+						#}
+						ENDIF
+						IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+						#{
+							CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+							IF((CUST.DATA.freeTxt1=="B127")OR(CUST.DATA.FIDADQ=="B127")) THEN
+							#{
+								CUST.DATA.debAccnt=CUST.DATA.devPurDebit1
+								CUST.TRAN.UserTrnCode = CUST.DATA.BAZCOMDEV_PUR
+									
+								##Devolucion Normal Devolucion
+								CUST.DATA.Nombre= "DEVOLUCION"
+								CUST.DATA.Nombre1= "CAJERO"
+								CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+								CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+								PRINT(CUST.DATA.stmtDesc)
+								CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+								CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+
+							#}
+							ELSE 
+							#{
+								IF ((CUST.DATA.freeTxt1=="VISA") OR (CUST.DATA.freeTxt1=="BNET") OR (TRIM(CUST.DATA.freeTxt1)=="MDS")OR(CUST.DATA.FIDADQ=="VISA") OR (CUST.DATA.FIDADQ=="BNET") OR (TRIM(CUST.DATA.FIDADQ)=="MDS")) THEN 
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.devIntPurDebit3
+									CUST.TRAN.UserTrnCode = CUST.DATA.DEVINT_PUR
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " " + CUST.DATA.currCode + " " + CUST.DATA.currSym + CUST.DATA.totSourceAmt + " RFC:" + CUST.DATA.RFC
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+										
+								#}
+								ELSE 
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.devPurComDebit1
+									CUST.TRAN.UserTrnCode = CUST.DATA.PUR_DEV_BAZ
+										
+									##Devolucion Normal Devolucion
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+								#}
+								ENDIF
+							#}
+							ENDIF
+							CUST.DATA.credAccnt=CUST.DATA.accNumber
+							CUST.DATA.custAccntFlg="Y"
+							CUST.TRAN.ChannelId = "POS"
+							CUST.TRAN.tranCategory = "N"
+							CUST.TRAN.freeText7 = "I"
+							CUST.DATA.accntNum=CUST.DATA.accNumber
+							CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+							IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+							#{
+								CUST.DATA.respTranId = CUST.DATA.TRANID
+								CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+								CUST.DATA.custTranId=CUST.DATA.TRANID
+								CUST.DATA.custTranDate=CUST.DATA.TRANDATE
+								print(CUST.DATA.respTranId)
+								print(CUST.DATA.respTranDate)
+								CUST.DATA.respCod = "APL00"
+								CUST.DATA.respMsg = "APLICADO"
+								CUST.DATA.incidentReason = CUST.DATA.errorMsg
+								CUST.DATA.blockUser = ""
+								CUST.DATA.blockDate = ""
+								CUST.DATA.appliedSettleAmt=CUST.DATA.PurAmt
+								CUST.DATA.pendingSettleAmt=""
+								CUST.DATA.exchangeAmtDiff=""
+								IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+								#{
+									CUST.DATA.totAppTran21Returns=CINT(CUST.DATA.totAppTran21Returns)+1
+									CUST.DATA.totAppAmtTran21Returns=CDOUBLE(CUST.DATA.totAppAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+									print(CUST.DATA.totTran21Returns)
+									CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totAmtTran21Returns)	
+								#}
+								ELSE 
+								#{
+									CUST.DATA.totAppTran21Returns=CINT(CUST.DATA.totAppTran21Returns)+1
+									CUST.DATA.totAppAmtTran21Returns=CDOUBLE(CUST.DATA.totAppAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+									print(CUST.DATA.totIntTran21Returns)
+									CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totIntAmtTran21Returns)
+								#}
+								ENDIF	
+							#}
+							ELSE
+							#{
+								CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+								CUST.DATA.incTranAmt=CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.incTranAmt)
+								print(CUST.DATA.errorMsg)
+								CUST.DATA.incAcctTrnType="C"
+								CUST.DATA.debAccnt=CUST.DATA.compProsaAcnt
+								CUST.DATA.credAccnt=CUST.DATA.incidAccnt1
+								CUST.DATA.custAccntFlg="N"
+								print(CUST.DATA.PurAmt)
+								
+								print(CUST.DATA.debAccnt)
+								print(CUST.DATA.credAccnt)
+								print(CUST.DATA.TranAmt)
+								CUST.TRAN.UserTrnCode = CUST.DATA.INCIDENCE_UTRANCODE
+								CUST.TRAN.ChannelId = "POS"
+								CUST.TRAN.tranCategory = "N"
+								CUST.TRAN.freeText7 = "I"
+								CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+								IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+								#{
+									
+									CUST.DATA.respTranId = CUST.DATA.TRANID
+									CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+									CUST.DATA.respCod = "INC00"
+									CUST.DATA.respMsg = "INCIDENCIA"
+									CUST.DATA.incidentReason = CUST.DATA.errorMsg
+									CUST.DATA.blockUser = ""
+									CUST.DATA.blockDate = ""
+									CUST.DATA.appliedSettleAmt=""
+									CUST.DATA.pendingSettleAmt=CUST.DATA.PurAmt
+									CUST.DATA.exchangeAmtDiff=""
+										
+									CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+									print(CUST.DATA.totInciTran21Returns)
+									CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totInciAmtTran21Returns)
+									IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+									#{
+										CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+										print(CUST.DATA.totTran21Returns)
+										CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totAmtTran21Returns)	
+									#}
+									ELSE
+									#{
+										CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+										print(CUST.DATA.totIntTran21Returns)
+										CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totIntAmtTran21Returns)
+									#}
+									ENDIF	
+								#}
+								ENDIF
+								
+						    #}
+							ENDIF
+														
+						#}
+						ELSE
+						#{
+						
+							CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+							CUST.DATA.incTranAmt=CDOUBLE(CUST.DATA.TranAmt)
+							print(CUST.DATA.incTranAmt)
+							print(CUST.DATA.errorMsg)
+							CUST.DATA.incAcctTrnType="C"
+							CUST.DATA.debAccnt=CUST.DATA.compProsaAcnt
+							CUST.DATA.credAccnt=CUST.DATA.incidAccnt1
+							CUST.DATA.custAccntFlg="N"
+							print(CUST.DATA.PurAmt)
+									
+							print(CUST.DATA.debAccnt)
+							print(CUST.DATA.credAccnt)
+							print(CUST.DATA.TranAmt)
+							CUST.TRAN.UserTrnCode = CUST.DATA.INCIDENCE_UTRANCODE
+							CUST.TRAN.ChannelId = "POS"
+							CUST.TRAN.tranCategory = "N"
+							CUST.TRAN.freeText7 = "I"
+							CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+							IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+							#{
+									
+								CUST.DATA.respTranId = CUST.DATA.TRANID
+								CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+								CUST.DATA.respCod = "INC00"
+								CUST.DATA.respMsg = "INCIDENCIA"
+								CUST.DATA.incidentReason = CUST.DATA.errorMsg
+								CUST.DATA.blockUser = ""
+								CUST.DATA.blockDate = ""
+								CUST.DATA.appliedSettleAmt=""
+								CUST.DATA.pendingSettleAmt=CUST.DATA.PurAmt
+								CUST.DATA.exchangeAmtDiff=""
+										
+								CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+								print(CUST.DATA.totInciTran21Returns)
+								CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.totInciAmtTran21Returns)
+								IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+								#{
+									CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+									print(CUST.DATA.totTran21Returns)
+									CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totAmtTran21Returns)	
+								#}
+								ELSE
+								#{
+									CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+									print(CUST.DATA.totIntTran21Returns)
+									CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totIntAmtTran21Returns)
+								#}
+								ENDIF	
+							#}
+							ENDIF
+						#}
+						ENDIF
+												
 					#}
 					ELSE 
 					#{
@@ -668,13 +1729,358 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 						#{	
 							##Aplicado a la cuenta del cliente
 							PRINT("MENOR A 29999")
-					
+							
+							##CODIGO APLICADO
+							##Aplicado a la cuenta del cliente
+							PRINT("Aplicado MENOR A 29999.99")
+							#####CODIGO aplicado
+						
+							BANCS.OUTPUT.successOrFailure="S"
+							sv_b = ""
+							sv_b= sv_b +" count|SELECT count(*)  from  TBAADM.GAM A,TBAADM.SMT D "
+							sv_b= sv_b +" WHERE  A.FORACID=?SVAR AND A.ACID = D.ACID AND A.BANK_ID=D.BANK_ID AND A.BANK_ID=?SVAR "
+							sv_b= sv_b +" AND A.ACCT_CLS_FLG!='Y' AND A.ACTIVE_STATUS not in ('D','I') "
+							sv_b= sv_b +" and A.frez_code not in ('C','T')"
+							sv_b= sv_b +" AND D.acct_status not in ('D','I')"
+							print(sv_b)
+							
+							BANCS.INPARAM.BINDVARS = CUST.DATA.accNumber + "|" + BANCS.STDIN.contextBankId
+							PRINT(BANCS.INPARAM.BINDVARS)
+							
+							sv_u = urhk_dbSelectWithBind(sv_b)
+							print(sv_u)
+							IF(sv_u == 0)THEN
+							#{
+								IF(BANCS.OUTPARAM.count <1) THEN
+								#{
+								
+									CUST.DATA.errorCode = "ERRMGD0276"
+									sv_r = func_cmmsgerrdescWithInputs("ERRMGD0276",BANCS.STDIN.userId, "", BYREF CUST.DATA.errorMsg)
+									PRINT(sv_r)
+									PRINT(CUST.DATA.errorCode)
+									PRINT(CUST.DATA.errorMsg)
+									BANCS.OUTPUT.successOrFailure="F"
+								#}
+								ENDIF
+							#}
+							ENDIF
+							IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+							#{
+								CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+								IF((CUST.DATA.freeTxt1=="B127")OR(CUST.DATA.FIDADQ=="B127")) THEN
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.devPurDebit1
+									CUST.TRAN.UserTrnCode = CUST.DATA.BAZCOMDEV_PUR
+									
+									##Devolucion Normal Devolucion
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+
+								#}
+								ELSE 
+								#{
+									IF ((CUST.DATA.freeTxt1=="VISA") OR (CUST.DATA.freeTxt1=="BNET") OR (TRIM(CUST.DATA.freeTxt1)=="MDS")OR(CUST.DATA.FIDADQ=="VISA") OR (CUST.DATA.FIDADQ=="BNET") OR (TRIM(CUST.DATA.FIDADQ)=="MDS")) THEN 
+									#{
+										CUST.DATA.debAccnt=CUST.DATA.devIntPurDebit3
+										CUST.TRAN.UserTrnCode = CUST.DATA.DEVINT_PUR
+										CUST.DATA.Nombre= "DEVOLUCION"
+										CUST.DATA.Nombre1= "CAJERO"
+										CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " " + CUST.DATA.currCode + " " + CUST.DATA.currSym + CUST.DATA.totSourceAmt + " RFC:" + CUST.DATA.RFC
+										PRINT(CUST.DATA.stmtDesc)
+										CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+										CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+										CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+										
+									#}
+									ELSE 
+									#{
+										CUST.DATA.debAccnt=CUST.DATA.devPurComDebit1
+										CUST.TRAN.UserTrnCode = CUST.DATA.PUR_DEV_BAZ
+										
+										##Devolucion Normal Devolucion
+										CUST.DATA.Nombre= "DEVOLUCION"
+										CUST.DATA.Nombre1= "CAJERO"
+										CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+										CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+										PRINT(CUST.DATA.stmtDesc)
+										CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+										CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+									#}
+									ENDIF
+								#}
+								ENDIF
+								CUST.DATA.credAccnt=CUST.DATA.accNumber
+								CUST.DATA.custAccntFlg="Y"
+								CUST.TRAN.ChannelId = "POS"
+								CUST.TRAN.tranCategory = "N"
+								CUST.TRAN.freeText7 = "I"
+								CUST.DATA.accntNum=CUST.DATA.accNumber
+								CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+								IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+								#{
+									CUST.DATA.respTranId = CUST.DATA.TRANID
+									CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+									CUST.DATA.custTranId=CUST.DATA.TRANID
+									CUST.DATA.custTranDate=CUST.DATA.TRANDATE
+									print(CUST.DATA.respTranId)
+									print(CUST.DATA.respTranDate)
+									CUST.DATA.respCod = "APL00"
+									CUST.DATA.respMsg = "APLICADO"
+									CUST.DATA.incidentReason = CUST.DATA.errorMsg
+									CUST.DATA.blockUser = ""
+									CUST.DATA.blockDate = ""
+									CUST.DATA.appliedSettleAmt=CUST.DATA.PurAmt
+									CUST.DATA.pendingSettleAmt=""
+									CUST.DATA.exchangeAmtDiff=""
+									IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+									#{
+										CUST.DATA.totAppTran21Returns=CINT(CUST.DATA.totAppTran21Returns)+1
+										CUST.DATA.totAppAmtTran21Returns=CDOUBLE(CUST.DATA.totAppAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+										print(CUST.DATA.totTran21Returns)
+										CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totAmtTran21Returns)	
+									#}
+									ELSE 
+									#{
+										CUST.DATA.totAppTran21Returns=CINT(CUST.DATA.totAppTran21Returns)+1
+										CUST.DATA.totAppAmtTran21Returns=CDOUBLE(CUST.DATA.totAppAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+										print(CUST.DATA.totIntTran21Returns)
+										CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totIntAmtTran21Returns)
+									#}
+									ENDIF	
+								#}
+								ELSE
+								#{
+									CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+									CUST.DATA.incTranAmt=CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.incTranAmt)
+									print(CUST.DATA.errorMsg)
+									CUST.DATA.incAcctTrnType="C"
+									CUST.DATA.debAccnt=CUST.DATA.compProsaAcnt
+									CUST.DATA.credAccnt=CUST.DATA.incidAccnt1
+									CUST.DATA.custAccntFlg="N"
+									print(CUST.DATA.PurAmt)
+								
+									print(CUST.DATA.debAccnt)
+									print(CUST.DATA.credAccnt)
+									print(CUST.DATA.TranAmt)
+									CUST.TRAN.UserTrnCode = CUST.DATA.INCIDENCE_UTRANCODE
+									CUST.TRAN.ChannelId = "POS"
+									CUST.TRAN.tranCategory = "N"
+									CUST.TRAN.freeText7 = "I"
+									CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+									IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+									#{
+									
+										CUST.DATA.respTranId = CUST.DATA.TRANID
+										CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+										CUST.DATA.respCod = "INC00"
+										CUST.DATA.respMsg = "INCIDENCIA"
+										CUST.DATA.incidentReason = CUST.DATA.errorMsg
+										CUST.DATA.blockUser = ""
+										CUST.DATA.blockDate = ""
+										CUST.DATA.appliedSettleAmt=""
+										CUST.DATA.pendingSettleAmt=CUST.DATA.PurAmt
+										CUST.DATA.exchangeAmtDiff=""
+										
+										CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+										print(CUST.DATA.totInciTran21Returns)
+										CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totInciAmtTran21Returns)
+										IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+										#{
+											CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+											print(CUST.DATA.totTran21Returns)
+											CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+											print(CUST.DATA.totAmtTran21Returns)	
+										#}
+										ELSE
+										#{
+											CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+											print(CUST.DATA.totIntTran21Returns)
+											CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+											print(CUST.DATA.totIntAmtTran21Returns)
+										#}
+										ENDIF	
+									#}
+									ENDIF
+								
+								#}
+								ENDIF
+														
+							#}
+							ELSE
+							#{
+						
+								CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+								CUST.DATA.incTranAmt=CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.incTranAmt)
+								print(CUST.DATA.errorMsg)
+								CUST.DATA.incAcctTrnType="C"
+								CUST.DATA.debAccnt=CUST.DATA.compProsaAcnt
+								CUST.DATA.credAccnt=CUST.DATA.incidAccnt1
+								CUST.DATA.custAccntFlg="N"
+								print(CUST.DATA.PurAmt)
+									
+								print(CUST.DATA.debAccnt)
+								print(CUST.DATA.credAccnt)
+								print(CUST.DATA.TranAmt)
+								CUST.TRAN.UserTrnCode = CUST.DATA.INCIDENCE_UTRANCODE
+								CUST.TRAN.ChannelId = "POS"
+								CUST.TRAN.tranCategory = "N"
+								CUST.TRAN.freeText7 = "I"
+								CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+								IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+								#{
+									
+									CUST.DATA.respTranId = CUST.DATA.TRANID
+									CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+									CUST.DATA.respCod = "INC00"
+									CUST.DATA.respMsg = "INCIDENCIA"
+									CUST.DATA.incidentReason = CUST.DATA.errorMsg
+									CUST.DATA.blockUser = ""
+									CUST.DATA.blockDate = ""
+									CUST.DATA.appliedSettleAmt=""
+									CUST.DATA.pendingSettleAmt=CUST.DATA.PurAmt
+									CUST.DATA.exchangeAmtDiff=""
+										
+									CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+									print(CUST.DATA.totInciTran21Returns)
+									CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totInciAmtTran21Returns)
+									IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+									#{
+										CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+										print(CUST.DATA.totTran21Returns)
+										CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totAmtTran21Returns)	
+									#}
+									ELSE
+									#{
+										CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+										print(CUST.DATA.totIntTran21Returns)
+										CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+										print(CUST.DATA.totIntAmtTran21Returns)
+									#}
+									ENDIF	
+								#}
+								ENDIF
+							#}
+							ENDIF
+						
 						#}
 						ELSE 
 						#{
 							##Analisis, abonar cuenta de oficna
 							PRINT("MAYOR A 29999")
-
+							
+							####CODIGO APLICADO
+							
+							IF(CUST.DATA.freeTxt1=="B127") THEN
+							#{
+								CUST.DATA.debAccnt=CUST.DATA.OOFDevPurDebit1
+								CUST.DATA.credAccnt=CUST.DATA.OOFDevPurCredit1
+								CUST.TRAN.UserTrnCode = CUST.DATA.OOFCOMDEV_PUR
+							
+								##Devolucion Normal Devolucion
+								CUST.DATA.Nombre= "DEVOLUCION"
+								CUST.DATA.Nombre1= "CAJERO"
+								CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+								CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+								PRINT(CUST.DATA.stmtDesc)
+								CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+								CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)							
+							#}
+							ELSE 
+							#{
+								IF ((CUST.DATA.freeTxt1=="VISA") OR (CUST.DATA.freeTxt1=="BNET") OR (TRIM(CUST.DATA.freeTxt1)=="MDS")) THEN 
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.OOFDevRedDebit2
+									CUST.DATA.credAccnt=CUST.DATA.OOFDevRedCredit2
+									CUST.TRAN.UserTrnCode = CUST.DATA.OOFINTDEV_PUR
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " " + CUST.DATA.currCode + " " + CUST.DATA.currSym + CUST.DATA.totSourceAmt + " RFC:" + CUST.DATA.RFC
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+								#}
+								ELSE 
+								#{
+									CUST.DATA.debAccnt=CUST.DATA.devOOFIntPurDebit3
+									CUST.DATA.credAccnt=CUST.DATA.devOOFIntPurCredit3
+									CUST.TRAN.UserTrnCode = CUST.DATA.OOFREDDEV_PUR
+								
+								
+									##Devolucion Normal Devolucion
+									CUST.DATA.Nombre= "DEVOLUCION"
+									CUST.DATA.Nombre1= "CAJERO"
+									CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+									CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+									PRINT(CUST.DATA.stmtDesc)
+									CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+									CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+								#}
+								ENDIF
+							#}
+							ENDIF
+						
+							CUST.DATA.errorMsg="TRANSACCION EN ANALISIS"
+							print(CUST.DATA.PurAmt)
+							CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+							print(CUST.DATA.debAccnt)
+							print(CUST.DATA.credAccnt)
+							print(CUST.DATA.TranAmt)
+							CUST.TRAN.ChannelId = "POS"
+							CUST.TRAN.tranCategory = "N"
+							CUST.TRAN.freeText7 = "I"
+							CUST.DATA.AnlStat = "Y"
+							CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+						
+							IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+							#{
+								CUST.DATA.respTranId = CUST.DATA.TRANID
+								CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+								print(CUST.DATA.respTranId)
+								print(CUST.DATA.respTranDate)
+								CUST.DATA.respCod = "ANL00"
+								CUST.DATA.respMsg = "ANALISIS"
+								CUST.DATA.incidentReason = CUST.DATA.errorMsg
+								CUST.DATA.blockUser = ""
+								CUST.DATA.blockDate = ""
+								CUST.DATA.appliedSettleAmt=""
+								CUST.DATA.pendingSettleAmt=CUST.DATA.TranAmt
+								CUST.DATA.exchangeAmtDiff=""
+								CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+								print(CUST.DATA.totInciTran21Returns)
+								CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+								print(CUST.DATA.totInciAmtTran21Returns)
+								IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+								#{
+									CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+									print(CUST.DATA.totTran21Returns)
+									CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totAmtTran21Returns)	
+								#}
+								ELSE
+								#{
+									CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+									print(CUST.DATA.totIntTran21Returns)
+									CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+									print(CUST.DATA.totIntAmtTran21Returns)
+								#}
+								ENDIF	
+							#}
+							ENDIF
 						#}
 						ENDIF
 					
@@ -685,6 +2091,107 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				#{
 					##Anlisis, abonar a la cuenta de oficina
 					PRINT("MAYOR A 180")
+					##CODIGO APLICADO
+					
+					IF(CUST.DATA.freeTxt1=="B127") THEN
+					#{
+						CUST.DATA.debAccnt=CUST.DATA.OOFDevPurDebit1
+						CUST.DATA.credAccnt=CUST.DATA.OOFDevPurCredit1
+						CUST.TRAN.UserTrnCode = CUST.DATA.OOFCOMDEV_PUR
+						
+						##Devolucion Normal Devolucion
+						CUST.DATA.Nombre= "DEVOLUCION"
+						CUST.DATA.Nombre1= "CAJERO"
+						CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+						CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+						PRINT(CUST.DATA.stmtDesc)
+						CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+						CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)							
+					#}
+					ELSE 
+					#{
+						IF ((CUST.DATA.freeTxt1=="VISA") OR (CUST.DATA.freeTxt1=="BNET") OR (TRIM(CUST.DATA.freeTxt1)=="MDS")) THEN 
+						#{
+							CUST.DATA.debAccnt=CUST.DATA.OOFDevRedDebit2
+							CUST.DATA.credAccnt=CUST.DATA.OOFDevRedCredit2
+							CUST.TRAN.UserTrnCode = CUST.DATA.OOFINTDEV_PUR
+							CUST.DATA.Nombre= "DEVOLUCION"
+							CUST.DATA.Nombre1= "CAJERO"
+							CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " " + CUST.DATA.currCode + " " + CUST.DATA.currSym + CUST.DATA.totSourceAmt + " RFC:" + CUST.DATA.RFC
+							CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+							PRINT(CUST.DATA.stmtDesc)
+							CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+							CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+						#}
+						ELSE 
+						#{
+							CUST.DATA.debAccnt=CUST.DATA.devOOFIntPurDebit3
+							CUST.DATA.credAccnt=CUST.DATA.devOOFIntPurCredit3
+							CUST.TRAN.UserTrnCode = CUST.DATA.OOFREDDEV_PUR
+								
+								
+							##Devolucion Normal Devolucion
+							CUST.DATA.Nombre= "DEVOLUCION"
+							CUST.DATA.Nombre1= "CAJERO"
+							CUST.DATA.stmtDesc= CUST.DATA.Nombre + " " + CUST.DATA.bussName + " " + CUST.DATA.bussLocation + " RFC:" + CUST.DATA.RFC
+							CUST.DATA.stmtDesc=TOUPPER(CUST.DATA.stmtDesc)
+							PRINT(CUST.DATA.stmtDesc)
+							CUST.DATA.freeText10 = LEFT$(CUST.DATA.stmtDesc,100)
+							CUST.DATA.freeTextDesc = LEFT$(CUST.DATA.stmtDesc,200)
+						#}
+						ENDIF
+					#}
+					ENDIF
+						
+					CUST.DATA.errorMsg="TRANSACCION EN ANALISIS"
+					print(CUST.DATA.PurAmt)
+					CUST.DATA.TranAmt=format$(CDOUBLE(CUST.DATA.PurAmt),"%0.2f")
+					print(CUST.DATA.debAccnt)
+					print(CUST.DATA.credAccnt)
+					print(CUST.DATA.TranAmt)
+					CUST.TRAN.ChannelId = "POS"
+					CUST.TRAN.tranCategory = "N"
+					CUST.TRAN.freeText7 = "I"
+					CUST.DATA.AnlStat = "Y"
+					CALLSCRIPTIFEXIST("makeTransaction_CardSettlement.scr")
+						
+					IF(BANCS.OUTPUT.successOrFailure=="S") THEN 
+					#{
+						CUST.DATA.respTranId = CUST.DATA.TRANID
+						CUST.DATA.respTranDate = CUST.DATA.TRANDATE
+						print(CUST.DATA.respTranId)
+						print(CUST.DATA.respTranDate)
+						CUST.DATA.respCod = "ANL00"
+						CUST.DATA.respMsg = "ANALISIS"
+						CUST.DATA.incidentReason = CUST.DATA.errorMsg
+						CUST.DATA.blockUser = ""
+						CUST.DATA.blockDate = ""
+						CUST.DATA.appliedSettleAmt=""
+						CUST.DATA.pendingSettleAmt=CUST.DATA.TranAmt
+						CUST.DATA.exchangeAmtDiff=""
+						CUST.DATA.totInciTran21Returns=CINT(CUST.DATA.totInciTran21Returns)+1
+						print(CUST.DATA.totInciTran21Returns)
+						CUST.DATA.totInciAmtTran21Returns=CDOUBLE(CUST.DATA.totInciAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+						print(CUST.DATA.totInciAmtTran21Returns)
+						IF((CUST.DATA.freeTxt1=="B127") OR ((CUST.DATA.freeTxt1!="VISA") AND (CUST.DATA.freeTxt1!="BNET") AND (TRIM(CUST.DATA.freeTxt1)!="MDS")) ) THEN
+						#{
+							CUST.DATA.totTran21Returns=CINT(CUST.DATA.totTran21Returns)+1
+							print(CUST.DATA.totTran21Returns)
+							CUST.DATA.totAmtTran21Returns=CDOUBLE(CUST.DATA.totAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+							print(CUST.DATA.totAmtTran21Returns)	
+						#}
+						ELSE
+						#{
+							CUST.DATA.totIntTran21Returns=CINT(CUST.DATA.totIntTran21Returns)+1
+							print(CUST.DATA.totIntTran21Returns)
+							CUST.DATA.totIntAmtTran21Returns=CDOUBLE(CUST.DATA.totIntAmtTran21Returns)+CDOUBLE(CUST.DATA.TranAmt)
+							print(CUST.DATA.totIntAmtTran21Returns)
+						#}
+						ENDIF	
+					#}
+					ENDIF
+					
+					
 
 				#}
 				ENDIF				
