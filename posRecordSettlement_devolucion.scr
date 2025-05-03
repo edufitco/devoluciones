@@ -1,9 +1,10 @@
 #############################################################################################
-# Nombre del script     : AMTZposRecordSettlement_devolucion.scr
+# Nombre del script     : posRecordSettlement_devolucion.scr
 # # Historial de modificación:
 # <No. serie>   <Fecha>      <Nombre del autor>    <Descripción>
 # ------------  ----------   --------------------  -------------------------------------------
 # SCR001        22-04-2025   Alberto Martinez Cruz Flujo de devoluciones         
+
 
 ##############################################################################################
 <--start
@@ -209,9 +210,10 @@ ENDIF
 ##SET MAX DAYS RULE
 CUST.DATA.MAXDAYS="180"
 
-
+print(CUST.DATA.currCode)
+print(CUST.DATA.TXSourceCountry)
 ######################################################################################################
-IF((CUST.DATA.currCode != "484") AND (TRIM(CUST.DATA.TXSourceCountry) != "MX"))THEN
+IF((CUST.DATA.currCode != "484") OR (TRIM(CUST.DATA.TXSourceCountry) != "MXN"))THEN
 #{	
 	CUST.DATA.EXTRANJERO = "Y"
 #}
@@ -757,7 +759,7 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				print(CUST.DATA.devAUTHID)
 				print(CUST.DATA.purDateTemp)
 				print(CUST.DATA.BDTranDEVDate)
-				##3.Verifica que haga match  card num                    MONTO                                numero de autorizacion                     fecha                           
+				##3.Verifica que haga match  card num                                 MONTO                                numero de autorizacion                     fecha                           
 				IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDEVAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate))THEN
 				#{
 					PRINT("nacional DENTRO DE LOS 180 dias MATCH PERFECTO")
@@ -821,8 +823,9 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				#{
 					##Sino hace match verifica que sea menor a 29,999
 					PRINT("NO HIZO MATCH")
-					PRINT(CUST.DATA.BDDEVAMT)		
-					IF(CUST.DATA.BDDEVAMT <=29999.99 )THEN
+					##CAMBIO A PURAMT
+					PRINT(CUST.DATA.PurAmt)		
+					IF(CUST.DATA.PurAmt<=29999.99 )THEN
 					#{	
 						PRINT("MENOR A 29999.99")
 						##Verifica que no sea repetida
@@ -999,7 +1002,7 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 					#{
 						##Sino hace match verifica que sea menor a 29,999
 						PRINT("NO HIZO MATCH")
-						IF(CUST.DATA.BDDEVAMT <=29999.99 )THEN
+						IF(CUST.DATA.PurAmt <=29999.99 )THEN
 						#{	
 							##Aplicado a la cuenta del cliente
 							PRINT("MENOR A 29999")
