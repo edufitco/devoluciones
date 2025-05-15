@@ -52,6 +52,8 @@ CUST.DATA.BDUTranDEVDate=""
 CUST.DATA.freeTextDesc = ""
 CUST.DATA.posOnlineCnt="0"
 CUST.DATA.repetidaStatus=""
+#BANDERA AUTHID INCORRECTO
+CUST.DATA.BANDERAAUTHID=""
 CUST.DATA.descType=""
 CUST.DATA.settleAmtDiff=""
 CUST.DATA.incAcctTrnType=""
@@ -228,13 +230,6 @@ ENDIF
 
 IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELDEXISTS(CUST.DATA.PurAmt) AND FIELDEXISTS(CUST.DATA.purDateTemp) AND FIELDEXISTS(CUST.DATA.tranType))THEN	
 #{
-	
-	
-	
-	
-	
-	
-	
 	##Verificar si el numero recibido es AUTHID, NUMERICREFERENCENUMBER o error
 	sv_s = ""
 	sv_s = "DEV_REF_TYPE|SELECT CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_MCP_TBL WHERE AUTHID = ?SVAR AND ACCTID = ?SVAR AND MODEOFOPN = ?SVAR AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR) THEN 'AUTHID' WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_MCP_TBL WHERE NUMERICREFNUM = ?SVAR AND ACCTID = ?SVAR AND MODEOFOPN = ?SVAR AND CHANNELID = ?SVAR AND BANK_ID = ?SVAR) THEN 'NUMERICREFNUM' ELSE 'NOT_FOUND' END AS REF_TYPE FROM DUAL"
@@ -601,10 +596,10 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 	sv_s = ""
 	sv_s = "onlineAmt, onlineAmtMXN,freeTxt1,TRANDATE,LIENID,settleFlg,userid,freeTxt2,freeTxt3|SELECT TRUNC(HOMETRANAMT,2), TRUNC(TRANAMT,2),FREETEXT1,TO_CHAR(TRANDATE,'DD-MM-YYYY'),LIENID,SETTLEMENT_FILE_FLG,userid,FREETEXT2,FREETEXT3 "
 	sv_s = sv_s + " FROM CUSTOM.CUST_MCP_TBL "  
-	sv_s = sv_s + " WHERE ACCTID=?SVAR AND NUMERICREFNUM = ?SVAR AND TO_CHAR(NVL(REQTRANDATE,TRANDATE),'DD-MM-YYYY')=?SVAR AND CHANNELID=?SVAR AND MODEOFOPN=?SVAR AND BANK_ID = ?SVAR AND ROWNUM=1"
+	sv_s = sv_s + " WHERE ACCTID=?SVAR AND AUTHID = ?SVAR AND TO_CHAR(NVL(REQTRANDATE,TRANDATE),'DD-MM-YYYY')=?SVAR AND CHANNELID=?SVAR AND MODEOFOPN=?SVAR AND BANK_ID = ?SVAR AND ROWNUM=1"
 				
 	print(sv_s)
-	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber +"|"+ CUST.DATA.AuthNum +"|"+ CUST.DATA.purDateTemp +"|POS|D|"+ BANCS.STDIN.contextBankId
+	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber +"|"+ CUST.DATA.devAUTHID +"|"+ CUST.DATA.purDateTemp +"|POS|D|"+ BANCS.STDIN.contextBankId
 	PRINT(sv_s)
 	PRINT(BANCS.INPARAM.BINDVARS)
 	sv_u = urhk_dbSelectWithBind(sv_s)
@@ -728,24 +723,49 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 	#}
 	ENDIF
 	
-	## Variable que verifica que no searepetida (posOnlineCnt) , cuenta la cantidad de NUMERICREFENUMBER con el authid, cuenta, numeric reference number fecha y monto
+	## Variable que nos indica si ya fue procesada, busca en la tabla CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL y devuelve "liquidada" o "pendiente"
 	sv_s = ""
-	sv_s = "posOnlineCnt|SELECT count(NUMERICREFNUM) FROM CUSTOM.CUST_MCP_TBL WHERE 1=1"
-	sv_s = sv_s + " AND ACCTID=?SVAR AND NUMERICREFNUM = ?SVAR AND 	AUTHID= ?SVAR AND TO_CHAR(NVL(REQTRANDATE,TRANDATE),'DD-MM-YYYY')=?SVAR AND CHANNELID=?SVAR AND MODEOFOPN=?SVAR AND BANK_ID = ?SVAR "
+	sv_s = "repetidaStatus|SELECT CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL WHERE AUTH_ID = ?SVAR AND ACCOUNT_NUMBER = ?SVAR AND TRAN_TYPE = ?SVAR) THEN 'LIQUIDADO' ELSE 'PENDIENTE' END AS ESTADO FROM DUAL"
 	print(sv_s)
-	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber + "|" +CUST.DATA.devNRN + "|"  + CUST.DATA.devAUTHID + "|"  +CUST.DATA.BDUTranDEVDate+"|POS|D|"+ BANCS.STDIN.contextBankId			
-	PRINT(sv_s)
+	BANCS.INPARAM.BINDVARS = CUST.DATA.devAUTHID + "|" + CUST.DATA.accNumber + "|21" 		
 	PRINT(BANCS.INPARAM.BINDVARS)
 	sv_u = urhk_dbSelectWithBind(sv_s)
 	print(sv_u)
 	IF(sv_u==0) THEN
 	#{
-		CUST.DATA.posOnlineCnt=BANCS.OUTPARAM.posOnlineCnt
-		print(CUST.DATA.posOnlineCnt)
+		CUST.DATA.repetidaStatus=BANCS.OUTPARAM.repetidaStatus
+		print(CUST.DATA.repetidaStatus)
 	#}
 	ENDIF
+	#AUTH NUMBER DE LA CADENAS DE LIQUIDACION
+	print(CUST.DATA.AuthNum)
+	#AUTH NUMBER OBTENIDO
+	print(CUST.DATA.devAUTHID)
+	#VALIDACION EN CASO DE QUE EL AUTHID SEA DIFERENTE SE CAMBIA EL VALOR DE AUTHNUM para que pueda ser precesada
+	IF(CUST.DATA.AuthNum == CUST.DATA.devAUTHID)THEN
+	#{	
+		#LLEGO CORRECTO EL AUTHID
+		PRINT("AUTHID CORRECTO")
+		#BANDERA QUE NOS INDICA QUE AUTHID ES CORRECTO
+		CUST.DATA.BANDERAAUTHID="I"
+
+	#}
+	ELSE
+	#{		
+		##Si hace match aplicado
+		PRINT("AUTHID INCORRECTO")
+		#CAMBIO DE BANDERA A DIFERENTE
+		CUST.DATA.BANDERAAUTHID="D"
+		##AUHTNUM TOMA EL VAOR DEL AUTHID OBTENIDO.
+		CUST.DATA.AuthNum = CUST.DATA.devAUTHID
+	#}
+	ENDIF
+	##AQUI DEBEN SER IGUALES
+	print(CUST.DATA.AuthNum)
+	print(CUST.DATA.devAUTHID)
+	print(CUST.DATA.BANDERAAUTHID)
 	
-	##Variable que trae el monto de la compra para la comparacion
+
 	
 	##INICIO VALIDACION DEVOLUCION
 	## 1. Verificar si es Nacional o no.
@@ -761,59 +781,26 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				####################################impresion datos de llave
 				print(CUST.DATA.cardNum)
 				print(CUST.DATA.BDCARDNUM)
+				#Monto de la devolucion
 				print(CUST.DATA.PurAmt)
+				#Monto de la compra
 				print(CUST.DATA.BDDPURAMT)
 				print(CUST.DATA.AuthNum)
 				print(CUST.DATA.devAUTHID)
 				print(CUST.DATA.purDateTemp)
 				print(CUST.DATA.BDTranDEVDate)
 				##3.Verifica que haga match  card num                                 MONTO                                numero de autorizacion                     fecha                           
-				IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDPURAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate))THEN
+				IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDPURAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate) AND (	CUST.DATA.BANDERAAUTHID=="I"))THEN
 				#{
 					PRINT("nacional DENTRO DE LOS 180 dias MATCH PERFECTO")
 					##Verifica que no sea repetida
-					PRINT(CUST.DATA.posOnlineCnt)
-					IF((CUST.DATA.posOnlineCnt>1) AND (CUST.DATA.posOnlineCnt!=0))THEN
+					PRINT(CUST.DATA.repetidaStatus)
+					IF(CUST.DATA.repetidaStatus == "LIQUIDADO")THEN
 					#{	
 						##REPETIDA, El primero aplicado, el resto a analisis-->cuenta de oficina
 						PRINT("REPETIDA")
-						PRINT(CUST.DATA.posOnlineCnt)
-						##INICIO CODIGO REPETIDAS
-						## Variable que verifica que nos indica si ya fue procesada, busca en la tabla CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL y devuelve "liquidad" o "pendiente"
-						sv_s = ""
-						sv_s = "repetidaStatus|SELECT CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL WHERE AUTH_ID = ?SVAR AND ACCOUNT_NUMBER = ?SVAR AND TRAN_TYPE = ?SVAR) THEN 'LIQUIDADO' ELSE 'PENDIENTE' END AS ESTADO FROM DUAL"
-						print(sv_s)
-						BANCS.INPARAM.BINDVARS = CUST.DATA.devAUTHID + "|" + CUST.DATA.accNumber + "|21" 		
-						PRINT(BANCS.INPARAM.BINDVARS)
-						sv_u = urhk_dbSelectWithBind(sv_s)
-						print(sv_u)
-						IF(sv_u==0) THEN
-						#{
-							CUST.DATA.repetidaStatus=BANCS.OUTPARAM.repetidaStatus
-							print(CUST.DATA.repetidaStatus)
-						#}
-						ENDIF
-						
-						##Validacion si existe en la tabla CUST_POS_SETTLEMENT_FILE_TBL
-						IF(CUST.DATA.repetidaStatus == "LIQUIDADO")THEN
-						#{
-							#En caso de que ya fue liquidado se manda a analisis 
-							CALLSCRIPTIFEXIST("mdp_analisisDevolucion.scr")
-							
-							
-						
-						#}
-						ELSE
-						#{
-							#En caso de no estar aplicado se aplica
-							#####################################
-							##Codigo que aplica la devolucioN
-							CALLSCRIPTIFEXIST("mdp_aplicaDevolucion.scr")
-							##FIN CODIGO APLICADO
-						
-						#}
-						ENDIF
-						##FIN CODIGO REPETIDAS	
+						#En caso de que ya fue liquidado se manda a analisis 
+						CALLSCRIPTIFEXIST("mdp_analisisDevolucion.scr")
 					#}
 					ELSE
 					#{		
@@ -831,53 +818,18 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				#{
 					##Sino hace match verifica que sea menor a 29,999
 					PRINT("NO HIZO MATCH")
-					##CAMBIO A PURAMT
+					##CAMBIO A PURAMT 
 					PRINT(CUST.DATA.PurAmt)		
 					IF(CUST.DATA.PurAmt<=29999.99 )THEN
 					#{	
 						PRINT("MENOR A 29999.99")
 						##Verifica que no sea repetida
-						IF((CUST.DATA.posOnlineCnt>1) AND (CUST.DATA.posOnlineCnt!=0))THEN
+						IF(CUST.DATA.repetidaStatus == "LIQUIDADO")THEN
 						#{	
-							##REPETIDA, El primero aplicado, el resto a analisis-->cuenta de oficina
-							PRINT("REPETIDA")
-							##INICIO CODIGO REPETIDAS
-							## Variable que verifica que nos indica si ya fue procesada, busca en la tabla CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL y devuelve "liquidad" o "pendiente"
-							sv_s = ""
-							sv_s = "repetidaStatus|SELECT CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL WHERE AUTH_ID = ?SVAR AND ACCOUNT_NUMBER = ?SVAR AND TRAN_TYPE = ?SVAR) THEN 'LIQUIDADO' ELSE 'PENDIENTE' END AS ESTADO FROM DUAL"
-							print(sv_s)
-							BANCS.INPARAM.BINDVARS = CUST.DATA.devAUTHID + "|" + CUST.DATA.accNumber + "|21" 		
-							PRINT(BANCS.INPARAM.BINDVARS)
-							sv_u = urhk_dbSelectWithBind(sv_s)
-							print(sv_u)
-							IF(sv_u==0) THEN
-							#{
-								CUST.DATA.repetidaStatus=BANCS.OUTPARAM.repetidaStatus
-								print(CUST.DATA.repetidaStatus)
-							#}
-							ENDIF
-						
-							##Validacion si existe en la tabla CUST_POS_SETTLEMENT_FILE_TBL
-							IF(CUST.DATA.repetidaStatus == "LIQUIDADO")THEN
-							#{
-								#En caso de que ya fue liquidado se manda a analisis 
-								CALLSCRIPTIFEXIST("mdp_analisisDevolucion.scr")
-								##FIN CODIGO ANALISIS
-							
-							
-						
-							#}
-							ELSE
-							#{
-								#En caso de no estar aplicado se aplica
-								#####################################
-								##Codigo que aplica la devolucioN
-								CALLSCRIPTIFEXIST("mdp_aplicaDevolucion.scr")
-								CUST.DATA.statusTransaccion = "APLICADO"
-								##FIN CODIGO APLICADO
-						
-							#}
-							ENDIF
+							##REPETIDA
+							PRINT("REPETIDA")			
+							#En caso de que ya fue liquidado se manda a analisis 
+							CALLSCRIPTIFEXIST("mdp_analisisDevolucion.scr")
 							##FIN CODIGO REPETIDAS	
 						#}
 						ELSE
@@ -942,57 +894,26 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 					##c. Verifica que haga match
 					print(CUST.DATA.cardNum)
 					print(CUST.DATA.BDCARDNUM)
+					#Monto devolucion
 					print(CUST.DATA.PurAmt)
+					#Monto compra
 					print(CUST.DATA.BDDPURAMT)
 					print(CUST.DATA.AuthNum)
 					print(CUST.DATA.devAUTHID)
 					print(CUST.DATA.purDateTemp)
 					print(CUST.DATA.BDTranDEVDate)
-					IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDPURAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate))THEN
+					IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDPURAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate) AND (CUST.DATA.BANDERAAUTHID=="I"))THEN
 					#{
 						##Si hace match aplicado
 						PRINT("HACE MATCH")
 						## a). Verificar si es repetida o no
-						IF((CUST.DATA.posOnlineCnt>1) AND (CUST.DATA.posOnlineCnt!=0)) THEN
+						IF(CUST.DATA.repetidaStatus == "LIQUIDADO")THEN
 						#{	
 							#REPETIDA El primero aplicado, el resto a analisis -->cuenta de oficina para devoluciones fuera de política
 							PRINT ("EXTRANJERO REPETIDA")
-							##INICIO CODIGO REPETIDAS
-							## Variable que verifica que nos indica si ya fue procesada, busca en la tabla CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL y devuelve "liquidad" o "pendiente"
-							sv_s = ""
-							sv_s = "repetidaStatus|SELECT CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL WHERE AUTH_ID = ?SVAR AND ACCOUNT_NUMBER = ?SVAR AND TRAN_TYPE = ?SVAR) THEN 'LIQUIDADO' ELSE 'PENDIENTE' END AS ESTADO FROM DUAL"
-							print(sv_s)
-							BANCS.INPARAM.BINDVARS = CUST.DATA.devAUTHID + "|" + CUST.DATA.accNumber + "|21" 		
-							PRINT(BANCS.INPARAM.BINDVARS)
-							sv_u = urhk_dbSelectWithBind(sv_s)
-							print(sv_u)
-							IF(sv_u==0) THEN
-							#{
-								CUST.DATA.repetidaStatus=BANCS.OUTPARAM.repetidaStatus
-								print(CUST.DATA.repetidaStatus)
-							#}
-							ENDIF
-						
-							##Validacion si existe en la tabla CUST_POS_SETTLEMENT_FILE_TBL
-							IF(CUST.DATA.repetidaStatus == "LIQUIDADO")THEN
-							#{
-								#En caso de que ya fue liquidado se manda a analisis 
-								CALLSCRIPTIFEXIST("mdp_analisisDevolucion.scr")
-								##FIN CODIGO ANALISIS
-						
-							#}
-							ELSE
-							#{
-								#En caso de no estar aplicado se aplica
-								#####################################
-								##Codigo que aplica la devolucioN
-								CALLSCRIPTIFEXIST("mdp_aplicaDevolucion.scr")
-								CUST.DATA.statusTransaccion = "APLICADO"
-								##FIN CODIGO APLICADO
-						
-							#}
-							ENDIF
-							##FIN CODIGO REPETIDAS								
+							#En caso de que ya fue liquidado se manda a analisis 
+							CALLSCRIPTIFEXIST("mdp_analisisDevolucion.scr")
+							##FIN CODIGO ANALISIS	
 						#}
 						ELSE 
 						#{
@@ -1017,46 +938,13 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 						
 
 							##Verificar que este repetida
-							IF((CUST.DATA.posOnlineCnt>1) AND (CUST.DATA.posOnlineCnt!=0)) THEN
+							IF(CUST.DATA.repetidaStatus == "LIQUIDADO")THEN
 							#{	
 								#El primero aplicado, el resto a analisis -->cuenta de oficina para devoluciones fuera de política
 								PRINT ("EXTRANJERO REPETIDA")
-								##INICIO CODIGO REPETIDAS
-								## Variable que verifica que nos indica si ya fue procesada, busca en la tabla CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL y devuelve "liquidad" o "pendiente"
-								sv_s = ""
-								sv_s = "repetidaStatus|SELECT CASE WHEN EXISTS (SELECT 1 FROM CUSTOM.CUST_POS_SETTLEMENT_FILE_TBL WHERE AUTH_ID = ?SVAR AND ACCOUNT_NUMBER = ?SVAR AND TRAN_TYPE = ?SVAR) THEN 'LIQUIDADO' ELSE 'PENDIENTE' END AS ESTADO FROM DUAL"
-								print(sv_s)
-								BANCS.INPARAM.BINDVARS = CUST.DATA.devAUTHID + "|" + CUST.DATA.accNumber + "|21" 		
-								PRINT(BANCS.INPARAM.BINDVARS)
-								sv_u = urhk_dbSelectWithBind(sv_s)
-								print(sv_u)
-								IF(sv_u==0) THEN
-								#{
-									CUST.DATA.repetidaStatus=BANCS.OUTPARAM.repetidaStatus
-									print(CUST.DATA.repetidaStatus)
-								#}
-								ENDIF
-						
-								##Validacion si existe en la tabla CUST_POS_SETTLEMENT_FILE_TBL
-								IF(CUST.DATA.repetidaStatus == "LIQUIDADO")THEN
-								#{
-									#En caso de que ya fue liquidado se manda a analisis 
-									CALLSCRIPTIFEXIST("mdp_analisisDevolucion.scr")
-									##FIN CODIGO ANALISIS
-								#}
-								ELSE
-								#{
-									#En caso de no estar aplicado se aplica
-									#####################################
-									##Codigo que aplica la devolucioN
-									CALLSCRIPTIFEXIST("mdp_aplicaDevolucion.scr")
-									CUST.DATA.statusTransaccion = "APLICADO"
-									##FIN CODIGO APLICADO
-						
-								#}
-								ENDIF
-								##FIN CODIGO REPETIDAS	
-								
+								#En caso de que ya fue liquidado se manda a analisis 
+								CALLSCRIPTIFEXIST("mdp_analisisDevolucion.scr")
+								##FIN CODIGO ANALISIS
 							#}
 							ELSE 
 							#{
@@ -1111,7 +999,7 @@ IF(CUST.DATA.respCod=="") THEN
 
 ELSE 
 #{
-	IF((CUST.DATA.posOnlineCnt>0) and (CUST.DATA.settleFlg!="Y")) THEN 
+	IF((CUST.DATA.repetidaStatus == "LIQUIDADO") and (CUST.DATA.settleFlg!="Y")) THEN 
 	#{
 		sv_s=""
 		sv_s=sv_s+"UPDATE CUSTOM.CUST_MCP_TBL SET SETTLEMENT_FILE_FLG='Y' "
@@ -1120,7 +1008,7 @@ ELSE
 		
 		
 		PRINT(sv_s)
-		BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber +"|"+CUST.DATA.purDateTemp+"|"+ BANCS.STDIN.contextBankId+"|"+CUST.DATA.AuthNum
+		BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber +"|"+CUST.DATA.purDateTemp+"|"+ BANCS.STDIN.contextBankId+"|"+CUST.DATA.devAUTHID
 		PRINT(BANCS.INPARAM.BINDVARS)
 		sv_d = urhk_dbSQLWithBind(sv_s)
 		PRINT(sv_d)
