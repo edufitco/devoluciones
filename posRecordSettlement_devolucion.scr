@@ -54,6 +54,8 @@ CUST.DATA.posOnlineCnt="0"
 CUST.DATA.repetidaStatus=""
 #BANDERA AUTHID INCORRECTO
 CUST.DATA.BANDERAAUTHID=""
+#BANDERA TARJETA INCORRECTA
+CUST.DATA.BANDERATARJETA=""
 CUST.DATA.descType=""
 CUST.DATA.settleAmtDiff=""
 CUST.DATA.incAcctTrnType=""
@@ -577,11 +579,11 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 	#}
 	ENDIF
 	
-		#####Variable que trae numero de tarjeta
+		#####Variable que trae numero de tarjeta, revisala existencia del numero de tarjeta
 	sv_s = ""
-	sv_s = "BDCARDNUM|SELECT TO_NUMBER(crd_mod_frmt, 'XXXXXXXXXXXXXXXXXXXX') AS decimal_value FROM CUSTOM.CUST_CARD_ACCT_TBL ccat WHERE EMP_ACCNT_NUM = ?SVAR"
+	sv_s = "BDCARDNUM|SELECT TO_NUMBER(crd_mod_frmt, 'XXXXXXXXXXXXXXXXXXXX') AS decimal_value FROM CUSTOM.CUST_CARD_ACCT_TBL WHERE EMP_ACCNT_NUM = ?SVAR AND TRIM(crd_mod_frmt) = TRIM(UPPER(TO_CHAR(TO_NUMBER(?SVAR), 'FMXXXXXXXXXXXXXXXX')))"
 	print(sv_s)
-	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber		
+	BANCS.INPARAM.BINDVARS =CUST.DATA.accNumber	 + "|" + CUST.DATA.cardNum	
 	PRINT(sv_s)
 	PRINT(BANCS.INPARAM.BINDVARS)
 	sv_u = urhk_dbSelectWithBind(sv_s)
@@ -589,9 +591,17 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 	IF(sv_u==0) THEN
 	#{
 		CUST.DATA.BDCARDNUM=BANCS.OUTPARAM.BDCARDNUM
+		# en caso de que exista 
+		CUST.DATA.BANDERATARJETA="I"
 		print(CUST.DATA.BDCARDNUM)
 	#}
+	ELSE
+	#{
+		#Quiere decir que no hace match
+		CUST.DATA.BANDERATARJETA="D"
+	#}
 	ENDIF
+	print(CUST.DATA.BANDERATARJETA)
 	
 	sv_s = ""
 	sv_s = "onlineAmt, onlineAmtMXN,freeTxt1,TRANDATE,LIENID,settleFlg,userid,freeTxt2,freeTxt3|SELECT TRUNC(HOMETRANAMT,2), TRUNC(TRANAMT,2),FREETEXT1,TO_CHAR(TRANDATE,'DD-MM-YYYY'),LIENID,SETTLEMENT_FILE_FLG,userid,FREETEXT2,FREETEXT3 "
@@ -790,7 +800,7 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 				print(CUST.DATA.purDateTemp)
 				print(CUST.DATA.BDTranDEVDate)
 				##3.Verifica que haga match  card num                                 MONTO                                numero de autorizacion                     fecha                           
-				IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDPURAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate) AND (	CUST.DATA.BANDERAAUTHID=="I"))THEN
+				IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDPURAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate) AND (	CUST.DATA.BANDERAAUTHID=="I") AND (CUST.DATA.BANDERATARJETA=="I"))THEN
 				#{
 					PRINT("nacional DENTRO DE LOS 180 dias MATCH PERFECTO")
 					##Verifica que no sea repetida
@@ -902,7 +912,7 @@ IF(FIELDEXISTS(CUST.DATA.cardNum) AND FIELDEXISTS(CUST.DATA.accNumber) AND FIELD
 					print(CUST.DATA.devAUTHID)
 					print(CUST.DATA.purDateTemp)
 					print(CUST.DATA.BDTranDEVDate)
-					IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDPURAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate) AND (CUST.DATA.BANDERAAUTHID=="I"))THEN
+					IF((CUST.DATA.cardNum == CUST.DATA.BDCARDNUM) AND (CDOUBLE(CUST.DATA.PurAmt)==CDOUBLE(CUST.DATA.BDDPURAMT)) AND (CUST.DATA.AuthNum==CUST.DATA.devAUTHID) AND (CUST.DATA.purDateTemp==CUST.DATA.BDTranDEVDate) AND (CUST.DATA.BANDERAAUTHID=="I") AND (CUST.DATA.BANDERATARJETA=="I"))THEN
 					#{
 						##Si hace match aplicado
 						PRINT("HACE MATCH")
